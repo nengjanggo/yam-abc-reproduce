@@ -21,9 +21,8 @@ from yam_abc_reproduce.config import (
 from yam_abc_reproduce.robot import passive_gello
 from yam_abc_reproduce.runtime import build_arm_units
 
-# Literal copies of the fleet driver's tables (lab42
-# common/hardware/src/common_hardware/robots/passive_gello.py), spelled out rather than
-# imported from config so the assertions catch drift.
+# Expected hardware direction tables, spelled out rather than imported from config
+# so the assertions catch drift.
 STATION_SIGNS = [-1, -1, 1, 1, -1, -1, 1]
 MOBILE_LEFT_SIGNS = [-1, 1, 1, 1, -1, -1, -1]
 MOBILE_RIGHT_SIGNS = [-1, -1, -1, -1, -1, -1, 1]

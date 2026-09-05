@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
+
+
+class CanSetupStart(BaseModel):
+    targets: list[str]
+    password: SecretStr = SecretStr("")
+
+
+class CanSetupContinue(BaseModel):
+    prompt_id: int
 
 
 class StartRecording(BaseModel):

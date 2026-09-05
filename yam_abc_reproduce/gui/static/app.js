@@ -19,8 +19,63 @@ document.querySelectorAll(".tabs button").forEach((btn) => {
     const collect = btn.dataset.tab === "collect";
     $("tray").style.display = collect ? "" : "none";
     $("armmon").style.display = collect ? "" : "none";
+    if (btn.dataset.tab === "setup") refreshCanSetup();
   };
 });
+
+// --- CAN setup: polls cached subprocess output, never the hardware -----------
+let canSetupState = null;
+let canSetupPending = false;
+function renderCanSetup(s) {
+  canSetupState = s;
+  const busy = s.active || canSetupPending;
+  $("can-setup-status").textContent = s.supported ? s.status : "Linux host required";
+  $("can-setup-start").disabled = busy || !s.supported;
+  $("can-setup-targets").disabled = busy;
+  $("can-setup-password").disabled = busy;
+  $("can-setup-cancel").disabled = !s.active || s.status === "cancelling" || canSetupPending;
+  $("can-setup-step").hidden = !s.prompt;
+  $("can-setup-prompt").textContent = s.prompt || "";
+  $("can-setup-continue").disabled = s.status !== "waiting" || canSetupPending;
+  const log = $("can-setup-logs");
+  const lines = (s.logs || []).join("\n");
+  if (log.textContent !== lines) { log.textContent = lines; log.scrollTop = log.scrollHeight; }
+}
+async function refreshCanSetup() {
+  if (canSetupPending) return;
+  try {
+    const r = await fetch("/api/maintenance/can-setup");
+    if (r.ok && !canSetupPending) renderCanSetup(await r.json());
+  } catch (_) { /* the connection indicator handles reconnects */ }
+}
+async function canSetupAction(action, body) {
+  if (canSetupPending) return;
+  canSetupPending = true;
+  if (canSetupState) renderCanSetup(canSetupState);
+  try {
+    const r = await post(`/api/maintenance/can-setup/${action}`, body);
+    if (r.detail) toast(typeof r.detail === "string" ? r.detail : "Invalid CAN setup request.", "err");
+    else renderCanSetup(r);
+  } catch (e) {
+    toast(`CAN setup connection failed: ${e.message}`, "err");
+  } finally {
+    canSetupPending = false;
+    if (canSetupState) renderCanSetup(canSetupState);
+    refreshCanSetup();
+  }
+}
+$("can-setup-start").onclick = () => {
+  const targets = [...$("can-setup-targets").querySelectorAll("input:checked")].map((el) => el.value);
+  if (!targets.length) return toast("Select at least one CAN adapter.", "err");
+  const password = $("can-setup-password").value;
+  $("can-setup-password").value = "";
+  canSetupAction("start", { targets, password });
+};
+$("can-setup-continue").onclick = () => canSetupAction("continue", { prompt_id: canSetupState.prompt_id });
+$("can-setup-cancel").onclick = () => canSetupAction("cancel");
+setInterval(() => {
+  if (canSetupState?.active || document.querySelector('[data-panel="setup"].on')) refreshCanSetup();
+}, 750);
 
 // --- station config rail (editable form; applied to the session on Start Teleop) --
 let OPTS = { controller_type: [], robot_type: [], gripper: [], camera_type: [], camera_role: [], data_format: [] };

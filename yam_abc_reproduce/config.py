@@ -46,9 +46,7 @@ _CONTROLLER_CHANNELS = {
 }
 _ROBOT_CHANNELS = {"yam_left": "can_left", "yam_right": "can_right"}
 
-# Passive-GELLO joint directions (arm joints then gripper), copied from
-# common/hardware/src/common_hardware/robots/passive_gello.py (lab42); keep them in
-# lockstep with its _REGULAR_JOINT_SIGNS / _MOBILE_JOINT_SIGNS. A desk GELLO's two arms
+# Passive-GELLO joint directions (arm joints then gripper). A desk GELLO's two arms
 # share one table; the mobile rig's right arm is mirrored, so each side has its own.
 # The gripper element is inert: the trigger normalizes by |angle| (see
 # passive_gello._normalize_gripper).

@@ -37,9 +37,34 @@ If an arm is unresponsive, use **Reset CAN** in the GUI (or re-run the `ip link`
 
 ### Naming the adapters (udev)
 
-> Fastest path: `python scripts/setup_can_udev.py` walks you through the
-> unplug/replug identification and writes `/etc/udev/rules.d/90-can.rules`
-> for you. The steps below are the manual equivalent.
+Open the GUI's **Setup → CAN adapter setup** section, select the adapters, and click
+**Start CAN Setup**. If the hardware is already open, use **Reset Session** in Collect
+first (this releases the arms). Enter the robot host's sudo password if required;
+it is used once and is not saved. For a remote host, use HTTPS or an SSH tunnel when
+entering the password.
+
+At each prompt, click **Continue** after completing the requested step. The GUI sends
+an Enter keystroke to the same running setup process. Unplug the selected adapters,
+then plug in one at a time:
+left leader → right leader → left follower → right follower. You can select a subset
+for a single-arm station or to replace one adapter. Review the proposed rules, click
+**Continue** to install, and replug the selected adapters to verify their names. The GUI
+shows live output and supports cancellation and reconnecting to an in-progress setup.
+
+The same setup runs from a terminal:
+
+```bash
+sudo bash scripts/yam_udev_rules.sh
+sudo bash scripts/yam_udev_rules.sh --target can_lead_r,can_right
+```
+
+This installs automatic `gs_usb` / 1 Mbit/s CAN configuration and serial-based names
+in `/etc/udev/rules.d/90-can.rules`. Existing rules are backed up next to that file;
+unselected bindings are preserved. Selected bindings change only after all adapters
+are identified and you confirm installation. Cancel does not undo installed rules.
+The separate `setup_can_sudoers.sh` install step is still needed for the GUI's
+**Reset CAN** action. The older `setup_can_udev.py` wizard remains available for naming
+only. The steps below are the manual equivalent.
 
 Those stable names (`can_left`, `can_lead_l`, …) come from **udev rules** that map each
 USB-CAN adapter's serial to a fixed interface name — otherwise Linux assigns `can0/can1/…`

@@ -139,6 +139,8 @@ bash scripts/install_cli_symlinks.sh   # symlinks them into /usr/local/bin (sudo
 ## Hardware Setup
 Hardware wiring (CAN buses, udev names, station/camera config, leader calibration) is in
 **[docs/hardware.md](docs/hardware.md)**.
+For adapter naming, open **Setup → CAN adapter setup** in the GUI, or run
+`sudo bash scripts/yam_udev_rules.sh` on the Linux robot host.
 
 ## Quickstart
 
@@ -166,7 +168,7 @@ end-to-end — teleoperate, record a few episodes, and inspect them. The **Train
 
 | Command | What it does |
 |---|---|
-| `yam-abc-gui` | Launch the web GUI (Collect / Review / Train / Deploy) |
+| `yam-abc-gui` | Launch the web GUI (Collect / Review / Train / Deploy / Setup) |
 | `yam-abc-cameras` | List connected cameras + serials for `configs/cameras.yaml` |
 | `yam-abc-teleop --record "<task>" --seconds 15` | Record one episode headless |
 | `yam-abc-convert <episodes> --to lerobot\|abc --repo-id <name>` | Convert recorded data for training |

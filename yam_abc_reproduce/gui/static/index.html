@@ -14,6 +14,7 @@
       <button data-tab="train">Train</button>
       <button data-tab="deploy">Deploy</button>
       <button data-tab="review">Review</button>
+      <button data-tab="setup">Setup</button>
     </nav>
     <div class="spacer"></div>
     <div class="conn" id="arm-box" title="arm/leader status"><span id="arm-txt">ARM —</span></div>
@@ -99,6 +100,40 @@
         <div class="controls"><button class="estop" id="estop">E-STOP</button></div>
       </div>
     </div>
+  </div>
+
+  <!-- SETUP: sequential USB-CAN binding -->
+  <div class="panel" data-panel="setup">
+    <section class="ft-sec can-setup">
+      <div class="sec-head">CAN adapter setup</div>
+      <p>Assign stable names to the YAM USB-CAN adapters and enable automatic 1 Mbit/s CAN setup.</p>
+      <p>Select the adapters to configure. Use <strong>Reset Session</strong> in Collect first if the robot hardware is open,
+        then follow the unplug / plug prompts. Previously identified adapters can stay connected.</p>
+      <fieldset id="can-setup-targets">
+        <legend>Adapters · binding order</legend>
+        <label class="chk"><input type="checkbox" value="can_lead_l" checked /> Left leader <code>can_lead_l</code></label>
+        <label class="chk"><input type="checkbox" value="can_lead_r" checked /> Right leader <code>can_lead_r</code></label>
+        <label class="chk"><input type="checkbox" value="can_left" checked /> Left follower <code>can_left</code></label>
+        <label class="chk"><input type="checkbox" value="can_right" checked /> Right follower <code>can_right</code></label>
+      </fieldset>
+      <div class="jobrow">
+        <label class="fld"><span>Robot-host sudo password (if needed)</span>
+          <input id="can-setup-password" type="password" autocomplete="off" placeholder="Leave blank for passwordless sudo" size="34" /></label>
+        <button class="btn primary" id="can-setup-start">Start CAN Setup</button>
+        <button class="btn" id="can-setup-cancel" disabled>Cancel</button>
+        <span class="status-pill" id="can-setup-status" role="status">idle</span>
+      </div>
+      <p class="hint">Enter the robot host's sudo password above, then start setup.
+        At each prompt, complete the requested step and click <strong>Continue</strong>.
+        Runs on the Linux host serving this GUI. The password is used once and is not saved.
+        Existing rules are backed up; bindings are installed after you review them.
+        Cancelling keeps any auto-configuration or bindings already installed.</p>
+      <div class="can-setup-step" id="can-setup-step" hidden>
+        <p id="can-setup-prompt" aria-live="polite"></p>
+        <button class="btn primary" id="can-setup-continue" title="Send Enter to the running setup script after completing this step." disabled>Continue</button>
+      </div>
+      <pre id="can-setup-logs" class="logs" aria-label="CAN setup output"></pre>
+    </section>
   </div>
 
   <!-- REVIEW: post-collection sanity check (video + synced action curves) -->

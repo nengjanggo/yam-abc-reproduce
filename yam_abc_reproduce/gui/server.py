@@ -36,8 +36,17 @@ from ..config import (
 from ..data import video
 from ..robot.can_bus import list_can_interfaces
 from . import convert_progress, gpus
+from .can_setup import CanSetup
 from .jobs import JobManager
-from .schemas import CreateJob, DeployStart, StartRecording, StationForm, ZeroGello
+from .schemas import (
+    CanSetupContinue,
+    CanSetupStart,
+    CreateJob,
+    DeployStart,
+    StartRecording,
+    StationForm,
+    ZeroGello,
+)
 from .session import CollectSession
 
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -52,6 +61,12 @@ def create_app(
     app = FastAPI(title="YAM-ABC-Reproduce", version=__version__)
     session = CollectSession(cfg, mock=mock)
     jobs = JobManager()
+    can_setup = CanSetup()
+
+    def require_can_available() -> None:
+        if can_setup.active:
+            raise HTTPException(status_code=409, detail="Finish or cancel CAN setup first.")
+
     _transcode_lock = threading.Lock()  # serializes review-video H.264 transcodes
 
     def base_cfg() -> StationConfig:
@@ -190,6 +205,11 @@ def create_app(
 
     @app.post("/api/collect/start-teleop")
     def start_teleop(form: StationForm | None = Body(default=None)):
+        with can_setup.lock:
+            require_can_available()
+            return _start_teleop(form)
+
+    def _start_teleop(form: StationForm | None):
         # First call goes live: apply the edited rail config, bring CAN up, build
         # devices, enable sync. Subsequent calls just re-enable sync.
         base = base_cfg()
@@ -810,19 +830,53 @@ def create_app(
         return {"killed": pid, "note": "SIGKILL"}
 
     # --- maintenance ------------------------------------------------------
+    @app.get("/api/maintenance/can-setup")
+    def can_setup_status():
+        return can_setup.status()
+
+    @app.post("/api/maintenance/can-setup/start")
+    def can_setup_start(body: CanSetupStart):
+        with can_setup.lock:
+            # E-STOP clears `live` but can leave units and the loop holding CAN.
+            if session.live or session.units or session.loop or session.deploy_loop:
+                raise HTTPException(status_code=409, detail=(
+                    "Robot hardware is open. Use Reset Session before CAN setup."
+                ))
+            try:
+                return can_setup.start(body.targets, body.password.get_secret_value())
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except (RuntimeError, OSError) as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/maintenance/can-setup/continue")
+    def can_setup_continue(body: CanSetupContinue):
+        try:
+            return can_setup.advance(body.prompt_id)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/maintenance/can-setup/cancel")
+    def can_setup_cancel():
+        return can_setup.cancel()
+
     @app.post("/api/maintenance/reset-can")
     def reset_can():
         """Bring the CAN buses back up (e.g. after re-plugging an arm)."""
         from ..robot.can_bus import reset_can_buses
 
-        ok, out = reset_can_buses()
+        with can_setup.lock:
+            require_can_available()
+            ok, out = reset_can_buses()
         return {"ok": ok, "output": out}
 
     @app.post("/api/maintenance/zero-gello")
     def zero_gello(body: ZeroGello):
         """Hardware-zero a passive-GELLO leader at its current pose (writes the
         encoder EEPROM). Hold the leader at the follower's home pose first."""
-        return session.zero_gello(body.side)
+        with can_setup.lock:
+            require_can_available()
+            return session.zero_gello(body.side)
 
     @app.post("/api/maintenance/end-hardware-session")
     def end_hardware_session():
@@ -849,7 +903,7 @@ def create_app(
         import logging as _logging
         _logging.getLogger("yam_abc_reproduce").info("shutdown: releasing robot + cameras")
         print("[yam-abc] shutdown: stopping loops and releasing cameras...", flush=True)
-        for step in (session.estop, session._disconnect_cameras):
+        for step in (can_setup.cancel, session.estop, session._disconnect_cameras):
             try:
                 step()
             except Exception:  # noqa: BLE001
@@ -868,11 +922,18 @@ def create_app(
         """Recover after an E-STOP (or a failed go-live) without restarting the GUI:
         tear down the loops + robot units, reset the CAN buses, clear the estop latch.
         The next Start Teleop rebuilds cleanly. Cameras/previews are kept."""
-        return session.reset_session()
+        with can_setup.lock:
+            require_can_available()
+            return session.reset_session()
 
     # --- autonomous deploy: in-session policy client ----------------------
     @app.post("/api/deploy/start")
     def deploy_start(body: DeployStart):
+        with can_setup.lock:
+            require_can_available()
+            return _deploy_start(body)
+
+    def _deploy_start(body: DeployStart):
         # The server (a Job via /api/jobs) is separate; this drives the client
         # loop over the previewing cameras + built robots against host:port.
         # Surface failures (server unreachable, missing deps, CAN down) to the UI
@@ -912,4 +973,5 @@ def create_app(
 
     app.state.session = session
     app.state.jobs = jobs
+    app.state.can_setup = can_setup
     return app

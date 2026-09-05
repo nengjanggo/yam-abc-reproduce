@@ -204,7 +204,14 @@ button{font-family:inherit}
 .panel.on{display:block}
 .body-row.panel{padding:0}
 .body-row.panel.on{display:flex}
-.panel[data-panel="train"],.panel[data-panel="deploy"]{overflow:auto;padding:1.3rem}
+.panel[data-panel="train"],.panel[data-panel="deploy"],.panel[data-panel="setup"]{overflow:auto;padding:1.3rem}
+.can-setup{max-width:1000px}
+.can-setup p{font-size:.86rem;line-height:1.6}
+.can-setup fieldset{display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0;padding:1rem;
+  border:1px solid var(--line);border-radius:var(--r-sm)}
+.can-setup legend{font-size:.8rem;color:var(--ink-2)}
+.can-setup-step{padding:1rem;margin:1rem 0;background:var(--clay-soft);border-radius:var(--r-sm)}
+.can-setup-step p{margin-top:0;font-weight:600}
 
 /* ---------- train / deploy ---------- */
 /* Train tab: separate the Convert and Train steps with titled, color-accented headers. */
