@@ -13,11 +13,14 @@ import math
 import select
 import socket
 import struct
+import sys
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from yam_abc_reproduce.storage import StoragePaths, add_save_root_argument  # noqa: E402
 
 CAN_FRAME = struct.Struct("=IB3x8s")
 CAN_EFF_FLAG = 0x80000000
@@ -99,10 +102,11 @@ def open_can_socket(interface: str) -> socket.socket:
     return can_socket
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Passively measure YAM CAN reply cadence during teleoperation."
     )
+    add_save_root_argument(parser)
     parser.add_argument("--seconds", type=float, default=60.0, help="capture duration (default: 60)")
     parser.add_argument(
         "--interfaces",
@@ -116,7 +120,12 @@ def main() -> None:
         action="store_true",
         help="also report unrecognised CAN IDs (useful for diagnosing a custom bus layout)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    paths = StoragePaths.from_arg(args.save_root)
+    if args.out:
+        args.out = paths.resolve(args.out)
+    elif args.save_root is not None:
+        args.out = paths.data / "diagnostics" / "can_reply_latency.json"
 
     sockets: dict[socket.socket, str] = {}
     for interface in args.interfaces:

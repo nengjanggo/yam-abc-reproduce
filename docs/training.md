@@ -4,11 +4,14 @@ Turn recorded demonstrations into a trained policy. Collect and review episodes 
 see [collect.md](collect.md). Assumes the station/venv are set up ([hardware.md](hardware.md));
 run everything from the repo root with the venv active.
 
-The GUI accepts `--save-root /mnt/yam` (default: repository root). GUI conversions and prepared
+The GUI and artifact CLI commands accept `--save-root /mnt/yam` (default: repository root). Conversions and prepared
 training data use `<save-root>/data/`; checkpoints and downloaded model caches use
 `<save-root>/model/`. See the [storage layout](../README.md#quickstart). The shell examples
 below assume the default root; substitute your selected root when preparing data manually.
-Standalone commands retain their existing defaults.
+For example, `yam-abc-convert /mnt/yam/data/episodes/fold --save-root /mnt/yam --repo-id local/fold`
+writes `/mnt/yam/data/lerobot/local/fold`. An explicit `--out` overrides that destination.
+`yam-abc-viz --save-root /mnt/yam --repo-id local/fold` selects the same dataset (subject to
+the viewer limitation below). Explicit input paths remain relative to the working directory.
 
 ## 1. Convert to a training dataset (Train tab → Convert)
 
@@ -247,3 +250,8 @@ python scripts/compute_abc_norm_stats.py --cache data/abc_cache --train-dir trai
 GUI ABC runs save checkpoints to `<save-root>/model/abc/checkpoints/<run>/` and CLIP downloads
 to `<save-root>/model/abc/cache/clip/`. Standalone ABC training keeps its original layout unless
 you pass `--model-cache-root`, `--checkpoint-dir`, and `--clip.cache-dir` explicitly.
+
+For data preparation, `python scripts/compute_abc_norm_stats.py --save-root /mnt/yam` reads
+`/mnt/yam/data/abc_cache/train_real/` and writes the cache's `norm_stats.json`; `--cache` and
+`--out` remain available as overrides. `python scripts/yam_episodes_to_abc_mcap.py --src <raw>
+--save-root /mnt/yam` defaults to `/mnt/yam/data/abc_release/`, preserving the split/task layout.

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+
+from .storage import StoragePaths, add_save_root_argument
 
 
 def cameras(argv: list[str] | None = None) -> None:
@@ -37,6 +40,7 @@ def teleop(argv: list[str] | None = None) -> None:
     from .teleop.loop import ControlLoop
 
     p = argparse.ArgumentParser(prog="yam-abc-teleop")
+    add_save_root_argument(p)
     p.add_argument("--station", default="configs/station_yam.yaml")
     p.add_argument("--cameras", default=None)
     p.add_argument("--mock", action="store_true", help="use mock robot + cameras")
@@ -45,6 +49,8 @@ def teleop(argv: list[str] | None = None) -> None:
     args = p.parse_args(argv)
 
     cfg = build_station_config(args.station, args.cameras)
+    paths = StoragePaths.from_arg(args.save_root)
+    cfg.save_root = str(paths.resolve(cfg.save_root or paths.episodes))
     units = build_arm_units(cfg, mock=args.mock)
     cameras = build_cameras_from_config(cfg, mock=args.mock)
     loop = ControlLoop(units, cameras, control_hz=cfg.control_hz)
@@ -54,20 +60,20 @@ def teleop(argv: list[str] | None = None) -> None:
 
 def convert(argv: list[str] | None = None) -> None:
     """Convert a default-format episode (or directory of them) to another format."""
-    import os
-    from pathlib import Path
-
     from .data.formats import convert_episode
 
     p = argparse.ArgumentParser(prog="yam-abc-convert")
+    add_save_root_argument(p)
     p.add_argument("src", help="episode dir (default format) or parent dir")
     p.add_argument("--to", default="lerobot", choices=["lerobot", "abc"])
     p.add_argument("--repo-id", default="yam_abc_reproduce/pick_and_place")
-    p.add_argument("--out", default=None, help="output root (LeRobot dataset root)")
+    p.add_argument("--out", default=None,
+                   help="dataset directory override (relative to --save-root if not absolute)")
     args = p.parse_args(argv)
-    if args.out is None and not os.environ.get("HF_LEROBOT_HOME"):
-        os.environ["HF_LEROBOT_HOME"] = str(Path(__file__).resolve().parents[1] / "data" / "lerobot")
-    convert_episode(args.src, to=args.to, repo_id=args.repo_id, out=args.out)
+    paths = StoragePaths.from_arg(args.save_root)
+    paths.configure_environment()
+    out = paths.resolve(args.out or paths.data / args.to / args.repo_id)
+    convert_episode(Path(args.src).expanduser(), to=args.to, repo_id=args.repo_id, out=str(out))
 
 
 def viz(argv: list[str] | None = None) -> None:
@@ -75,11 +81,15 @@ def viz(argv: list[str] | None = None) -> None:
     from .data.visualize import visualize_lerobot
 
     p = argparse.ArgumentParser(prog="yam-abc-viz")
+    add_save_root_argument(p)
     p.add_argument("--repo-id", default="yam_abc_reproduce/pick_and_place")
-    p.add_argument("--root", default=None)
+    p.add_argument("--root", default=None, help="explicit dataset directory (overrides --save-root)")
     p.add_argument("--episode-index", type=int, default=0)
     args = p.parse_args(argv)
-    visualize_lerobot(repo_id=args.repo_id, root=args.root, episode_index=args.episode_index)
+    paths = StoragePaths.from_arg(args.save_root)
+    paths.configure_environment()
+    root = Path(args.root).expanduser() if args.root else paths.lerobot / args.repo_id
+    visualize_lerobot(repo_id=args.repo_id, root=str(root), episode_index=args.episode_index)
 
 
 def gui(argv: list[str] | None = None) -> None:
@@ -92,8 +102,7 @@ def gui(argv: list[str] | None = None) -> None:
     from .gui.server import create_app
 
     p = argparse.ArgumentParser(prog="yam-abc-gui")
-    p.add_argument("--save-root", default=None, metavar="ROOT",
-                   help="root for data/ and model/ outputs (default: repository root)")
+    add_save_root_argument(p)
     p.add_argument("--station", default="configs/station_yam.yaml")
     p.add_argument("--cameras", default=None)
     p.add_argument("--mock", action="store_true", help="use mock robot + cameras")

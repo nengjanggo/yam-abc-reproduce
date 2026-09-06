@@ -11,6 +11,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from yam_abc_reproduce.storage import StoragePaths, add_save_root_argument  # noqa: E402
 
 DEFAULT_IFACES = ["can_left", "can_right", "can_lead_l", "can_lead_r"]
 
@@ -102,15 +104,21 @@ def print_sample(index: int, now: str, samples: list[dict], previous: list[dict]
         print(message)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Read-only CAN/USB transport monitor. It never transmits CAN frames."
     )
+    add_save_root_argument(parser)
     parser.add_argument("--seconds", type=float, default=60.0, help="total sampling time")
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between samples")
     parser.add_argument("--out", type=Path, default=None, help="optional JSON report path")
     parser.add_argument("--interfaces", nargs="+", default=DEFAULT_IFACES)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    paths = StoragePaths.from_arg(args.save_root)
+    if args.out:
+        args.out = paths.resolve(args.out)
+    elif args.save_root is not None:
+        args.out = paths.data / "diagnostics" / "can_usb_quality.json"
     if args.seconds <= 0 or args.interval <= 0:
         parser.error("--seconds and --interval must be positive")
 

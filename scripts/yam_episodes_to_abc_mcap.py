@@ -45,9 +45,13 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from yam_abc_reproduce.storage import StoragePaths, add_save_root_argument  # noqa: E402
 
 _SCHEMAS = Path(__file__).resolve().parents[1] / "yam_abc_reproduce" / "data" / "formats" / "abc_schemas.binpb"
 
@@ -212,17 +216,21 @@ def convert_episode(ep: Path, out_mcap: Path, task: str, cls: dict) -> None:
             w.finish()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Raw YAM episodes -> ABC release-format episode.mcap")
+    add_save_root_argument(ap)
     ap.add_argument("--src", required=True, help="dir containing episode_*.npy.mp4 episode dirs")
-    ap.add_argument("--out", required=True, help="release-mcap root (writes <out>/{train,val}/<task>/...)")
+    ap.add_argument("--out", default=None,
+                    help="release MCAP directory override (default: <save-root>/data/abc_release)")
     ap.add_argument("--task", default="insert_the_wireless_bluetooth_earbuds_into_the_charging_case",
                     help="task/instruction; also the dir name the trainer reads for the prompt")
     ap.add_argument("--val", type=int, default=2, help="episodes assigned to the val split")
     ap.add_argument("--limit", type=int, default=0, help="cap number of episodes (0 = all)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    paths = StoragePaths.from_arg(args.save_root)
 
-    src, out = Path(args.src), Path(args.out)
+    src = Path(args.src).expanduser()
+    out = paths.resolve(args.out or paths.data / "abc_release")
     eps = _find_episodes(src)
     if args.limit:
         eps = eps[:args.limit]

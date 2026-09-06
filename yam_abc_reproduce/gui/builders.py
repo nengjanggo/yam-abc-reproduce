@@ -319,6 +319,7 @@ def _deploy_openpi(ckpt, prompt, port, p, default_cfg, paths: StoragePaths = DEF
         f"CUDA_VISIBLE_DEVICES={dev} {_gpus.DEVICE_ORDER} "
         f"XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 "
         f"{_q(_PY)} {_q(_SERVERS / 'openpi_server.py')} "
+        f"--save-root {_q(paths.root)} "
         f"--config {shlex.quote(cfg)} --checkpoint {shlex.quote(ckpt)} "
         f"--port {port} --prompt {shlex.quote(prompt)} "
         f"--flatten-prefix observation/ --image-key-map {shlex.quote(ikm)} "
@@ -346,6 +347,7 @@ def _train_deploy_molmoact2(ckpt, prompt, port, p, paths: StoragePaths = DEFAULT
         f"CUDA_VISIBLE_DEVICES={dev} {_gpus.DEVICE_ORDER} "
         f"PYTHONPATH={_q(_OPENPI_CLIENT)} "
         f"{_q(_PY)} {_q(_SERVERS / 'molmoact_server.py')} "
+        f"--save-root {_q(paths.root)} "
         f"{ck}--molmoact-repo {_q(_MOLMOACT)} --port {port} --device cuda:0 --dtype bfloat16"
     )
 
@@ -363,6 +365,7 @@ def _train_deploy_abc(ckpt, prompt, port, p, paths: StoragePaths = DEFAULT_PATHS
         f"ABC_CACHE={_q(paths.abc_cache)} PYTHONPATH={_q(str(_ABC) + ':' + str(_OPENPI_CLIENT))} "
         f"ABC_DEBUG_DUMP={_q(dump)} "
         f"{_q(_PY)} {_q(_SERVERS / 'abc_server.py')} "
+        f"--save-root {_q(paths.root)} "
         f"--model-cache-root {_q(paths.model_cache('abc'))} "
         f"--checkpoint {shlex.quote(ckpt)} --prompt {shlex.quote(prompt)} "
         f"--port {port} --device cuda"
@@ -400,7 +403,7 @@ def build_convert_command(params: dict, paths: StoragePaths = DEFAULT_PATHS) -> 
     fmt = params.get("to", "lerobot")
     script = (
         f"cd {_q(_REPO_ROOT)} && {_q(_VENV / 'bin' / 'yam-abc-convert')} "
-        f"{_q(src)} --to {_q(fmt)} --repo-id {_q(repo_id)} --out {_q(params['out'])}"
+        f"{_q(src)} --save-root {_q(paths.root)} --to {_q(fmt)} --repo-id {_q(repo_id)} --out {_q(params['out'])}"
     )
     return _bash(script, paths)
 

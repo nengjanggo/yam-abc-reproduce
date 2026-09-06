@@ -32,6 +32,9 @@ from pathlib import Path
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from yam_abc_reproduce.storage import StoragePaths, add_save_root_argument  # noqa: E402
+
 sys.path.insert(0, os.path.dirname(__file__))
 import _wire 
 from imageproc import letterbox_224
@@ -136,8 +139,9 @@ def build_infer(policy, camera_keys):
     return infer
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="ABC DiT YAM-ABC-Reproduce websocket server")
+    add_save_root_argument(p)
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8300)
     p.add_argument("--checkpoint", required=True, help="checkpoint path or s3:// uri")
@@ -145,7 +149,9 @@ def main() -> None:
     p.add_argument("--device", default="cuda")
     p.add_argument("--model-cache-root", type=Path, default=None,
                    help="directory for downloaded weights, CLIP assets, and merged checkpoints")
-    args = p.parse_args()
+    args = p.parse_args(argv)
+    paths = StoragePaths.from_arg(args.save_root)
+    paths.configure_environment()
 
     from abc_minimal.config import SimEvalConfig
     from abc_minimal.eval_policy import SimPolicy, local_checkpoint
@@ -155,11 +161,10 @@ def main() -> None:
     from abc_minimal.dit import infer_dit_shape
 
     config = SimEvalConfig(checkpoint=args.checkpoint, prompt=args.prompt)
-    cache = args.model_cache_root.expanduser().resolve() if args.model_cache_root else None
-    if cache is not None:
-        config.clip.cache_dir = str(cache / "clip")
-    ckpt_path = local_checkpoint(config.checkpoint, cache / "downloads" if cache else None)
-    ckpt_path = _maybe_merge_lora(ckpt_path, cache / "merged" if cache else None)
+    cache = paths.resolve(args.model_cache_root or paths.model_cache("abc"))
+    config.clip.cache_dir = str(cache / "clip")
+    ckpt_path = local_checkpoint(config.checkpoint, cache / "downloads")
+    ckpt_path = _maybe_merge_lora(ckpt_path, cache / "merged")
     # Match the model shape to the checkpoint.
     shape = infer_dit_shape(ckpt_path)
     for k, v in shape.items():

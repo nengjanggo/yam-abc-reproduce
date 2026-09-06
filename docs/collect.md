@@ -49,8 +49,9 @@ YAM-ABC-Reproduce's default format. The task name is **slugified** — lowercase
 punctuation to `_` — so `put the bottle in the bin` becomes `put_the_bottle_in_the_bin`, and
 that slug is what the Train tab's task field and `yam-abc-convert data/episodes/<task>` want.
 
-Launch with `yam-abc-gui --save-root /mnt/yam` to choose the storage root (default: repository
-root). The Output rail shows the resolved episode directory. A custom station or rail save
+Launch with `yam-abc-gui --save-root /mnt/yam` or
+`yam-abc-teleop --save-root /mnt/yam --record "fold cloth" --seconds 15` to choose the storage
+root (default: repository root). The Output rail shows the resolved episode directory. A custom station or rail save
 path overrides it; relative output paths resolve against the selected root. The GUI Convert
 panel reads from the current collection path.
 

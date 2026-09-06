@@ -29,8 +29,13 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
+from pathlib import Path
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from yam_abc_reproduce.storage import StoragePaths, add_save_root_argument  # noqa: E402
 
 # Serving fetches the PaliGemma tokenizer from gs://big_vision via gcsfs, whose aiohttp
 # session ignores http_proxy without trust_env=True. Must be at module scope: fsspec reads
@@ -89,8 +94,9 @@ class RemapPolicy:
             self._policy.reset()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="openpi YAM-ABC-Reproduce websocket server")
+    add_save_root_argument(p)
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--config", required=True, help="openpi TrainConfig name (config.get_config)")
@@ -114,7 +120,8 @@ def main() -> None:
         help="key the model's Input transform reads state from (e.g. "
         "'observation/state' for the YAM-ABC-Reproduce YAM config; default 'state')",
     )
-    args = p.parse_args()
+    args = p.parse_args(argv)
+    StoragePaths.from_arg(args.save_root).configure_environment()
 
     from openpi.policies import policy_config
     from openpi.serving import websocket_policy_server

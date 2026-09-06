@@ -164,10 +164,10 @@ yam-abc-gui --save-root /mnt/yam
 | Downloaded model weights and caches | `model/` (backend and library subfolders) |
 
 The GUI's editable save paths and custom station `save_root` settings override these defaults;
-relative output paths resolve against `--save-root`. Model and dataset cache locations are set
-for GUI child processes, while existing authentication settings are preserved. Existing data
-and checkpoints are not moved; select older checkpoints by their explicit paths. Standalone
-commands such as `yam-abc-teleop` and `yam-abc-convert` retain their own defaults.
+relative output paths resolve against `--save-root`. The same argument and repository-root
+default apply to `yam-abc-teleop`, `yam-abc-convert`, `yam-abc-viz`, policy server scripts, and
+the artifact tools listed below. Model and dataset caches are configured before loading the
+backend, while authentication settings are preserved. Existing artifacts are not moved.
 
 Opens the GUI. **Collect** and **Review** work
 end-to-end — teleoperate, record a few episodes, and inspect them. The **Train** and
@@ -197,6 +197,26 @@ end-to-end — teleoperate, record a few episodes, and inspect them. The **Train
 
 `yam-abc-teleop`, `yam-abc-gui` and `yam-abc-deploy` accept `--mock` (mock robot + cameras).
 `yam-abc-cameras`, `yam-abc-convert`, `yam-abc-viz` and `yam-abc-doctor` do not.
+
+Storage-producing commands accept `--save-root ROOT`, and `yam-abc-viz` uses it to locate
+`ROOT/data/lerobot/<repo-id>`. Explicit output arguments (`--out`, merge `dst`, server
+`--model-cache-root`) override defaults; relative outputs resolve against the save root.
+Explicit input paths (`src`, `--src`, `--cache`, viewer `--root`, checkpoint paths) retain
+their normal meaning relative to the working directory. Absolute paths and `~` are supported.
+
+| Artifact tool | Default location under the save root |
+|---|---|
+| `python scripts/compute_abc_norm_stats.py` | Reads `data/abc_cache/`, writes `data/abc_cache/norm_stats.json` |
+| `python scripts/yam_episodes_to_abc_mcap.py --src <raw>` | `data/abc_release/{train,val}/<task>/...` |
+| `python -m yam_abc_reproduce.deploy.merge_abc_lora <src>` | `model/abc/merged/<name>_merged.pt` |
+| Policy server scripts under `yam_abc_reproduce/deploy/servers/` | Model/download caches under `model/` |
+| `python scripts/check_can_usb_quality.py` | `data/diagnostics/can_usb_quality.json` |
+| `python scripts/monitor_can_reply_latency.py` | `data/diagnostics/can_reply_latency.json` |
+
+The two CAN monitors save a report when `--save-root` or `--out` is supplied; otherwise they
+print to the terminal. `yam-abc-cameras`, `yam-abc-doctor`, and `yam-abc-deploy` do not save
+artifacts (the terminal deploy client does not record rollouts), so they have no `--save-root`.
+Hardware configuration/calibration tools and vendored backend CLIs keep their native arguments.
 
 ## Project layout
 

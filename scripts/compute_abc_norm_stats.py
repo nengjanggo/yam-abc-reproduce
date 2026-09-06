@@ -18,9 +18,13 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from yam_abc_reproduce.storage import StoragePaths, add_save_root_argument  # noqa: E402
 
 STATE_DIM = 14  # [left arm6, left ee1, right arm6, right ee1]
 STD_FLOOR = 1e-2  # dims with std below this are treated as constant -> std=1.0
@@ -45,15 +49,18 @@ def stats(x: np.ndarray) -> dict:
     return {"mean": mean.tolist(), "std": std.tolist(), "_floored_dims": np.where(floored)[0].tolist()}
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Compute ABC norm_stats.json from an export cache")
-    ap.add_argument("--cache", required=True, help="ABC cache root (contains train_real/)")
+    add_save_root_argument(ap)
+    ap.add_argument("--cache", default=None,
+                    help="ABC cache override (default: <save-root>/data/abc_cache)")
     ap.add_argument("--train-dir", default="train_real", help="split to compute stats over")
     ap.add_argument("--state-dim", type=int, default=STATE_DIM)
     ap.add_argument("--out", default=None, help="output path (default <cache>/norm_stats.json)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    paths = StoragePaths.from_arg(args.save_root)
 
-    cache = Path(args.cache)
+    cache = Path(args.cache).expanduser() if args.cache else paths.abc_cache
     rows = load_rows(cache, args.train_dir)
     state = stats(rows[:, : args.state_dim])
     actions = stats(rows[:, args.state_dim :])
@@ -62,7 +69,8 @@ def main() -> None:
         print(f"{name}: dims={len(s['mean'])}  std=[{min(s['std']):.4g}..{max(s['std']):.4g}]"
               + (f"  floored dims (constant)->1.0: {fl}" if fl else "  (no floored dims)"))
 
-    out = Path(args.out) if args.out else cache / "norm_stats.json"
+    out = paths.resolve(args.out) if args.out else cache / "norm_stats.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"state": state, "actions": actions}, indent=2))
     print(f"\nrows={len(rows)}  wrote {out}")
 

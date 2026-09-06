@@ -147,6 +147,8 @@ def test_backend_shell_paths_and_cache_environment(tmp_path, command_capture, ba
               "checkpoint": "/input/checkpoint with spaces", "prompt": "fold cloth"}
     train = command_capture(builders.build_train_command(params, paths)[0])
     deploy = command_capture(builders.build_deploy_command(params, paths)[0])
+    deploy_args = deploy[0]["argv"]
+    assert deploy_args[deploy_args.index("--save-root") + 1] == str(paths.root)
     for child in [*train, *deploy]:
         for key, expected in paths.cache_env().items():
             assert child["env"][key] == expected
@@ -184,6 +186,7 @@ def test_conversion_job_freezes_paths_for_progress(tmp_path, command_capture, fm
     assert job.returncode == 0
     child = json.loads(job.logs[0])
     assert child["argv"][0] == str(paths.root / "custom/task")
+    assert child["argv"][child["argv"].index("--save-root") + 1] == str(paths.root)
     assert child["argv"][-2:] == ["--out", str(paths.root / "exports/ds")]
     out = Path(params["out"])
     out.mkdir(parents=True)

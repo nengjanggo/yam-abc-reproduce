@@ -28,7 +28,9 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import torch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from yam_abc_reproduce.storage import StoragePaths, add_save_root_argument  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(__file__))
 import _wire  # noqa: E402  (sibling module, no yam_abc_reproduce dependency)
@@ -75,8 +77,9 @@ def build_infer(policy, num_steps: int):
     return infer
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="MolmoAct2-YAM YAM-ABC-Reproduce websocket server")
+    add_save_root_argument(p)
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8202)
     p.add_argument("--device", default="cuda:0")
@@ -101,7 +104,10 @@ def main() -> None:
         default=str(Path(__file__).resolve().parents[3] / "third_party" / "policy" / "molmoact2"),
         help="path to the molmoact2 checkout (default: sibling submodule)",
     )
-    args = p.parse_args()
+    args = p.parse_args(argv)
+    StoragePaths.from_arg(args.save_root).configure_environment()
+
+    import torch
 
     host_mod = _load_host_server_module(Path(args.molmoact_repo))
     dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}[

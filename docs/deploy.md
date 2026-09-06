@@ -47,6 +47,15 @@ repository root). The checkpoint dropdown scans `<save-root>/model/<backend>/che
 also live under `model/`. Existing checkpoints remain usable by entering their explicit path;
 the GUI does not move old artifacts.
 
+All three policy server scripts also accept `--save-root /mnt/yam` when launched directly,
+with the same repository-root default. They configure model download/cache paths before
+loading the backend. ABC's `--model-cache-root` can override its cache directory.
+To merge a checkpoint explicitly, run
+`python -m yam_abc_reproduce.deploy.merge_abc_lora <checkpoint> --save-root /mnt/yam`;
+the default output is `/mnt/yam/model/abc/merged/<name>_merged.pt`, and an optional second
+positional argument overrides it. The terminal `yam-abc-deploy` client does not record
+rollouts and needs no storage argument.
+
 > **Only the Client half is remotable.** **Start Server** always launches on the box running
 > the GUI, and the **checkpoint** dropdown lists checkpoints found on *that* box. So for a
 > remote GPU box you start the server there by hand (§1) and type its checkpoint path in —
