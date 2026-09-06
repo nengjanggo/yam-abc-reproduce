@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from yam_abc_reproduce.config import CameraConfig, RobotConfig, StationConfig  # noqa: E402
 from yam_abc_reproduce.gui.server import create_app  # noqa: E402
+from yam_abc_reproduce.gui.storage import StoragePaths  # noqa: E402
 
 
 @pytest.fixture
@@ -296,12 +297,12 @@ def test_abc_launch_refuses_without_a_prepared_cache(no_gpus, monkeypatch, tmp_p
     torchrun had spun up every rank, with the real reason buried under a ChildFailedError."""
     from yam_abc_reproduce.gui import builders
 
-    cache = tmp_path / "abc_cache"
-    monkeypatch.setattr(builders, "_ABC_CACHE", cache)
+    paths = StoragePaths(tmp_path)
+    cache = paths.abc_cache
     monkeypatch.setattr(builders, "_require_backend_venv", lambda backend: None)
 
     with pytest.raises(ValueError) as e:
-        builders.build_train_command({"backend": "abc"})
+        builders.build_train_command({"backend": "abc"}, paths=paths)
     # Names every path train.py would have complained about, and how to produce them.
     for want in ("norm_stats.json", "train_real", "val_real", "export_mcap.py",
                  "compute_abc_norm_stats.py"):
@@ -310,7 +311,7 @@ def test_abc_launch_refuses_without_a_prepared_cache(no_gpus, monkeypatch, tmp_p
     for name in ("train_real", "val_real"):
         (cache / name).mkdir(parents=True)
     (cache / "norm_stats.json").write_text("{}")
-    assert "--mixture-preset=yam_abc " in builders.build_train_command({"backend": "abc"})[1]
+    assert "--mixture-preset=yam_abc " in builders.build_train_command({"backend": "abc"}, paths=paths)[1]
 
 
 def test_train_tab_shows_the_abc_cache_prerequisite(client):
@@ -352,13 +353,12 @@ def test_convert_progress_counts_frames_not_episodes(tmp_path, monkeypatch):
     from yam_abc_reproduce.gui import convert_progress as cp
 
     src = _fake_corpus(tmp_path, [88, 3981, 4000])
-    monkeypatch.setattr(cp, "_REPO_ROOT", tmp_path)
-    monkeypatch.setattr(cp, "_LEROBOT_HOME", tmp_path / "lerobot")
-    info = tmp_path / "lerobot" / "ds" / "meta" / "info.json"
+    paths = StoragePaths(tmp_path)
+    info = tmp_path / "data" / "lerobot" / "ds" / "meta" / "info.json"
     info.parent.mkdir(parents=True)
     info.write_text('{"total_episodes": 2, "total_frames": 4069, "fps": 30}')
 
-    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "ds"}, None, time.time() - 100)
+    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "ds"}, None, time.time() - 100, paths=paths)
     assert (s["episodes_done"], s["episodes_total"]) == (2, 3)
     assert (s["frames_done"], s["frames_total"]) == (4069, 8069)
     assert abs(s["frac"] - 4069 / 8069) < 1e-6      # frames drive the bar, not 2/3
@@ -369,14 +369,13 @@ def test_convert_progress_counts_mcaps_for_abc(tmp_path, monkeypatch):
     from yam_abc_reproduce.gui import convert_progress as cp
 
     src = _fake_corpus(tmp_path, [100, 200, 300, 400])
-    monkeypatch.setattr(cp, "_REPO_ROOT", tmp_path)
-    monkeypatch.setattr(cp, "_ABC_OUT", tmp_path / "abc")
-    out = tmp_path / "abc" / "ds"
+    paths = StoragePaths(tmp_path)
+    out = tmp_path / "data" / "abc" / "ds"
     out.mkdir(parents=True)
     for i in range(3):
         (out / f"episode_{i:06d}.mcap").write_bytes(b"\x89MCAP0\r\n")
 
-    s = cp.snapshot({"src": str(src), "to": "abc", "repo_id": "ds"}, None, time.time() - 60)
+    s = cp.snapshot({"src": str(src), "to": "abc", "repo_id": "ds"}, None, time.time() - 60, paths=paths)
     assert (s["episodes_done"], s["episodes_total"]) == (3, 4)
     assert abs(s["frac"] - 0.75) < 1e-6
 
@@ -387,16 +386,15 @@ def test_convert_progress_survives_a_missing_or_partial_dataset(tmp_path, monkey
     from yam_abc_reproduce.gui import convert_progress as cp
 
     src = _fake_corpus(tmp_path, [10, 20])
-    monkeypatch.setattr(cp, "_REPO_ROOT", tmp_path)
-    monkeypatch.setattr(cp, "_LEROBOT_HOME", tmp_path / "lerobot")
+    paths = StoragePaths(tmp_path)
 
-    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "nope"}, None, time.time())
+    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "nope"}, None, time.time(), paths=paths)
     assert s["frames_done"] == 0 and s["frac"] == 0.0 and s["eta_s"] is None
 
-    info = tmp_path / "lerobot" / "half" / "meta" / "info.json"
+    info = tmp_path / "data" / "lerobot" / "half" / "meta" / "info.json"
     info.parent.mkdir(parents=True)
     info.write_text('{"total_episodes": 1, "total_fram')   # truncated mid-write
-    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "half"}, None, time.time())
+    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "half"}, None, time.time(), paths=paths)
     assert s["episodes_done"] == 1 and s["frames_done"] == 0
 
 
@@ -406,15 +404,14 @@ def test_convert_progress_ignores_a_previous_runs_output(tmp_path, monkeypatch):
     from yam_abc_reproduce.gui import convert_progress as cp
 
     src = _fake_corpus(tmp_path, [100] * 8)
-    monkeypatch.setattr(cp, "_REPO_ROOT", tmp_path)
-    monkeypatch.setattr(cp, "_ABC_OUT", tmp_path / "abc")
-    out = tmp_path / "abc" / "ds"
+    paths = StoragePaths(tmp_path)
+    out = tmp_path / "data" / "abc" / "ds"
     out.mkdir(parents=True)
     for i in range(8):                                  # leftovers from the killed run
         (out / f"episode_{i:06d}.mcap").write_bytes(b"x")
 
     started = time.time() + 1     # every existing file predates this job
-    s = cp.snapshot({"src": str(src), "to": "abc", "repo_id": "ds"}, None, started)
+    s = cp.snapshot({"src": str(src), "to": "abc", "repo_id": "ds"}, None, started, paths=paths)
     assert s["episodes_done"] == 0 and s["frac"] == 0.0
 
 
@@ -424,16 +421,15 @@ def test_convert_progress_rereads_the_source_each_poll(tmp_path, monkeypatch):
     from yam_abc_reproduce.gui import convert_progress as cp
 
     src = _fake_corpus(tmp_path, [1000, 1000, 1000])
-    monkeypatch.setattr(cp, "_REPO_ROOT", tmp_path)
-    monkeypatch.setattr(cp, "_LEROBOT_HOME", tmp_path / "lerobot")
-    info = tmp_path / "lerobot" / "fold" / "meta" / "info.json"
+    paths = StoragePaths(tmp_path)
+    info = tmp_path / "data" / "lerobot" / "fold" / "meta" / "info.json"
     info.parent.mkdir(parents=True)
     info.write_text('{"total_episodes": 1, "total_frames": 1000}')
     args = ({"src": str(src), "to": "lerobot", "repo_id": "fold"}, None, time.time() - 60)
-    assert cp.snapshot(*args)["frames_total"] == 3000
+    assert cp.snapshot(*args, paths=paths)["frames_total"] == 3000
 
     _fake_corpus(tmp_path, [1000] * 6)                  # operator records 6 more takes
-    assert cp.snapshot(*args)["frames_total"] == 9000    # 3 + 6, not the cached 3000
+    assert cp.snapshot(*args, paths=paths)["frames_total"] == 9000    # 3 + 6, not the cached 3000
 
 
 def test_convert_progress_skips_unflagged_source_dirs(tmp_path, monkeypatch):
@@ -442,16 +438,15 @@ def test_convert_progress_skips_unflagged_source_dirs(tmp_path, monkeypatch):
     from yam_abc_reproduce.gui import convert_progress as cp
 
     src = _fake_corpus(tmp_path, [100, 100, 100])
-    monkeypatch.setattr(cp, "_REPO_ROOT", tmp_path)
-    monkeypatch.setattr(cp, "_LEROBOT_HOME", tmp_path / "lerobot")
+    paths = StoragePaths(tmp_path)
     stranded = src / "20260739_killed"                  # recorder.start() leftover, no flag
     stranded.mkdir()
     (stranded / "top-timestamp.npy").write_bytes(b"\0" * (128 + 8 * 700))
 
-    info = tmp_path / "lerobot" / "fold" / "meta" / "info.json"
+    info = tmp_path / "data" / "lerobot" / "fold" / "meta" / "info.json"
     info.parent.mkdir(parents=True)
     info.write_text('{"total_episodes": 3, "total_frames": 300}')
-    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "fold"}, None, time.time() - 60)
+    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "fold"}, None, time.time() - 60, paths=paths)
     assert (s["episodes_total"], s["frames_total"]) == (3, 300)
     assert s["frac"] == 1.0 and s["eta_s"] is None       # a finished job reads as finished
 
@@ -462,13 +457,12 @@ def test_convert_progress_without_a_top_camera(tmp_path, monkeypatch):
     from yam_abc_reproduce.gui import convert_progress as cp
 
     src = _fake_corpus(tmp_path, [300, 1200], role="wrist")
-    monkeypatch.setattr(cp, "_REPO_ROOT", tmp_path)
-    monkeypatch.setattr(cp, "_LEROBOT_HOME", tmp_path / "lerobot")
-    info = tmp_path / "lerobot" / "fold" / "meta" / "info.json"
+    paths = StoragePaths(tmp_path)
+    info = tmp_path / "data" / "lerobot" / "fold" / "meta" / "info.json"
     info.parent.mkdir(parents=True)
     info.write_text('{"total_episodes": 1, "total_frames": 300}')
 
-    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "fold"}, None, time.time() - 60)
+    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "fold"}, None, time.time() - 60, paths=paths)
     assert s["frames_total"] == 1500 and s["frac"] > 0 and s["eta_s"] is not None
 
 
@@ -479,9 +473,8 @@ def test_convert_progress_prefers_metadata_num_frames(tmp_path, monkeypatch):
 
     src = _fake_corpus(tmp_path, [100])
     (src / "ep0000" / "metadata.json").write_text('{"num_frames": 4242, "task_name": "t"}')
-    monkeypatch.setattr(cp, "_REPO_ROOT", tmp_path)
-    monkeypatch.setattr(cp, "_LEROBOT_HOME", tmp_path / "lerobot")
-    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "none"}, None, time.time())
+    paths = StoragePaths(tmp_path)
+    s = cp.snapshot({"src": str(src), "to": "lerobot", "repo_id": "none"}, None, time.time(), paths=paths)
     assert s["frames_total"] == 4242
 
 

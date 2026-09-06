@@ -8,6 +8,7 @@ JobManager, never in the routes.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import threading
 from pathlib import Path
@@ -39,6 +40,7 @@ from . import convert_progress, gpus
 from .jobs import JobManager
 from .schemas import CreateJob, DeployStart, StartRecording, StationForm, ZeroGello
 from .session import CollectSession
+from .storage import REPO_ROOT, StoragePaths
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -48,10 +50,18 @@ def create_app(
     mock: bool = False,
     station_path: str | None = None,
     cameras_path: str | None = None,
+    save_root: str | Path | None = None,
 ) -> FastAPI:
+    paths = StoragePaths(REPO_ROOT if save_root is None else Path(save_root))
+
+    def storage_cfg(config: StationConfig) -> StationConfig:
+        config = copy.deepcopy(config)
+        config.save_root = str(paths.resolve(config.save_root or paths.episodes))
+        return config
+
     app = FastAPI(title="YAM-ABC-Reproduce", version=__version__)
-    session = CollectSession(cfg, mock=mock)
-    jobs = JobManager()
+    session = CollectSession(storage_cfg(cfg), mock=mock)
+    jobs = JobManager(paths)
     _transcode_lock = threading.Lock()  # serializes review-video H.264 transcodes
 
     def base_cfg() -> StationConfig:
@@ -62,7 +72,7 @@ def create_app(
         if station_path is None:
             return session.cfg
         try:
-            return build_station_config(station_path, cameras_path)
+            return storage_cfg(build_station_config(station_path, cameras_path))
         except Exception:
             return session.cfg
 
@@ -146,6 +156,9 @@ def create_app(
             "task_name": c.task_name,
             "data_format": c.data_format,
             "save_root": c.save_root,
+            "storage": {"root": str(paths.root), "data": str(paths.data),
+                        "model": str(paths.model), "episodes": str(paths.episodes),
+                        "rollouts": str(paths.rollouts)},
             # Station default for the Deploy tab's "home pose" field (None = don't home).
             "deploy_home_pose": c.deploy_home_pose,
             "mock": mock,
@@ -174,7 +187,7 @@ def create_app(
         camera config so previews reflect edits; called on Collect-tab load and by
         the Preview button."""
         base = base_cfg()
-        cfg_to_use = apply_station_form(base, form.model_dump()) if form is not None else base
+        cfg_to_use = storage_cfg(apply_station_form(base, form.model_dump())) if form is not None else base
         try:
             session.connect_cameras(cfg_to_use)
         except RuntimeError as e:  # e.g. camera-set change refused while live
@@ -194,7 +207,7 @@ def create_app(
         # devices, enable sync. Subsequent calls just re-enable sync.
         base = base_cfg()
         try:
-            cfg_to_use = apply_station_form(base, form.model_dump()) if form is not None else base
+            cfg_to_use = storage_cfg(apply_station_form(base, form.model_dump())) if form is not None else base
         except ValueError as e:  # e.g. two devices assigned the same CAN bus
             raise HTTPException(status_code=400, detail=str(e))
         try:
@@ -239,7 +252,7 @@ def create_app(
           dataset: data/episodes/<task>/<ep>     rollout: data/rollouts/<policy>/<task>/<ep>"""
         return {
             "dataset": Path(session.cfg.save_root),
-            "rollout": Path("data/rollouts"),
+            "rollout": paths.rollouts,
         }
 
     def _episode_dir(ep_id: str) -> Path:
@@ -393,7 +406,7 @@ def create_app(
         from .train_schema import BACKENDS, fields_for, note_for
 
         return {"backends": BACKENDS, "backend": backend, "fields": fields_for(backend),
-                "note": note_for(backend)}
+                "note": note_for(backend, paths)}
 
 
     # --- policy-server lifecycle helpers -----------------------------------
@@ -452,8 +465,14 @@ def create_app(
             backend = str(body.params.get("backend") or "")
             ckpt = str(body.params.get("checkpoint") or "")
             if backend in ("pi0", "pi05") and ckpt:
-                is05 = "pi05" in ckpt
-                if backend == "pi05" and not is05 and "pi0" in ckpt:
+                # The selected storage root can itself contain "pi0" or "pi05".
+                marker_path = ckpt
+                try:
+                    marker_path = str(Path(ckpt).relative_to(paths.root))
+                except ValueError:
+                    pass
+                is05 = "pi05" in marker_path
+                if backend == "pi05" and not is05 and "pi0" in marker_path:
                     raise HTTPException(status_code=409, detail=(
                         f"backend is pi05 but the checkpoint looks like a pi0 one ({ckpt}). "
                         "Pick a pi05_* checkpoint from the dropdown."))
@@ -480,7 +499,10 @@ def create_app(
                     "holding every card (click the GPU badge to inspect/kill it). "
                     "Free one first or the model load will OOM."))
         try:
-            job = jobs.launch(body.kind, body.params)
+            params = body.params
+            if body.kind == "convert":
+                params = paths.conversion_params(params, Path(session.cfg.save_root))
+            job = jobs.launch(body.kind, params)
         except ValueError as e:
             # Builder refusals: missing dataset, backend not installed, more GPUs than exist.
             # These have to be an HTTPException -- app.js reads `detail` off the JSON body,
@@ -571,7 +593,7 @@ def create_app(
         job = jobs.get(job_id)
         if job is None or job.kind != "convert":
             raise HTTPException(status_code=404, detail=f"no convert job {job_id!r}")
-        return convert_progress.snapshot(job.params, job.pid, job.started)
+        return convert_progress.snapshot(job.params, job.pid, job.started, paths=paths)
 
     @app.post("/api/jobs/{job_id}/stop")
     def stop_job(job_id: str):
@@ -582,12 +604,11 @@ def create_app(
     def deploy_checkpoints(backend: str = "pi0"):
         """List trained checkpoint paths for `backend`, newest first, so the
         Deploy tab can offer a dropdown instead of a blind text field."""
-        from .builders import _ABC_CACHE, _MOLMOACT, _OPENPI
         found: list[tuple[float, str]] = []
         note = None
         try:
             if backend in ("pi0", "pi05"):
-                base = _OPENPI / "checkpoints"
+                base = paths.checkpoints(backend)
                 if base.is_dir():
                     for cfg in base.iterdir():
                         ok = (cfg.name.startswith("pi05") if backend == "pi05"
@@ -600,9 +621,9 @@ def create_app(
                             for step in exp.iterdir():
                                 if (step / "params").is_dir():
                                     found.append((step.stat().st_mtime,
-                                                  str(step.relative_to(_OPENPI))))
+                                                  str(step)))
             elif backend == "molmoact2":
-                base = _MOLMOACT / "experiments" / "checkpoints" / "finetune"
+                base = paths.checkpoints(backend)
                 if base.is_dir():
                     for run in base.iterdir():
                         if run.is_dir():
@@ -612,9 +633,9 @@ def create_app(
                     if found:
                         note = "OLMo-core checkpoints — convert to HF (convert_molmoact2_to_hf.py) before deploy"
             elif backend == "abc":
-                base = _ABC_CACHE / "finetune_checkpoints"
+                base = paths.checkpoints(backend)
                 if base.is_dir():
-                    for f in base.glob("*.pt"):
+                    for f in base.glob("*/*.pt"):
                         found.append((f.stat().st_mtime, str(f)))
         except OSError:
             pass
@@ -881,7 +902,9 @@ def create_app(
             session.start_deploy(
                 host=body.host, port=body.port, prompt=body.prompt,
                 cfg=base_cfg(), open_loop_horizon=body.open_loop_horizon,
-                record=body.record, save_root=body.save_root, home_pose=body.home_pose,
+                record=body.record,
+                save_root=str(paths.resolve(body.save_root or paths.rollouts / "pi0")),
+                home_pose=body.home_pose,
                 rtc=body.rtc, rtc_prefix_length=body.rtc_prefix_length,
                 rtc_action_horizon=body.rtc_action_horizon,
                 rtc_lead_steps=body.rtc_lead_steps,
@@ -912,4 +935,5 @@ def create_app(
 
     app.state.session = session
     app.state.jobs = jobs
+    app.state.storage = paths
     return app

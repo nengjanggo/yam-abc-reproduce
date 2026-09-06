@@ -85,9 +85,8 @@ def _patch_modeling_for_bf16(local_dir: str) -> None:
         ),
     ]
     candidates = [os.path.join(local_dir, "modeling_molmoact2.py")]
-    modules_root = os.path.expanduser(
-        "~/.cache/huggingface/modules/transformers_modules"
-    )
+    modules_root = os.path.join(os.path.expanduser(os.environ.get(
+        "HF_MODULES_CACHE", "~/.cache/huggingface/modules")), "transformers_modules")
     if os.path.isdir(modules_root):
         for sub in os.listdir(modules_root):
             p = os.path.join(modules_root, sub, "modeling_molmoact2.py")

@@ -9,6 +9,10 @@ Each field: name, label, type (text|number|select), default, [options], [help].
 
 from __future__ import annotations
 
+import shlex
+
+from .storage import DEFAULT_PATHS, StoragePaths
+
 BACKENDS = ["pi0", "pi05", "molmoact2", "abc"]
 
 
@@ -116,5 +120,5 @@ def fields_for(backend: str) -> list[dict]:
     return FIELDS.get(backend, FIELDS["pi0"])
 
 
-def note_for(backend: str) -> str:
-    return NOTES.get(backend, "")
+def note_for(backend: str, paths: StoragePaths = DEFAULT_PATHS) -> str:
+    return NOTES.get(backend, "").replace("data/abc_cache", shlex.quote(str(paths.abc_cache)))

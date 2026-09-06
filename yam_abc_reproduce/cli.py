@@ -92,6 +92,8 @@ def gui(argv: list[str] | None = None) -> None:
     from .gui.server import create_app
 
     p = argparse.ArgumentParser(prog="yam-abc-gui")
+    p.add_argument("--save-root", default=None, metavar="ROOT",
+                   help="root for data/ and model/ outputs (default: repository root)")
     p.add_argument("--station", default="configs/station_yam.yaml")
     p.add_argument("--cameras", default=None)
     p.add_argument("--mock", action="store_true", help="use mock robot + cameras")
@@ -104,7 +106,8 @@ def gui(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
     cfg = build_station_config(args.station, args.cameras)
-    app = create_app(cfg, mock=args.mock, station_path=args.station, cameras_path=args.cameras)
+    app = create_app(cfg, mock=args.mock, station_path=args.station, cameras_path=args.cameras,
+                     save_root=args.save_root)
 
     # Silencing uvicorn (below) also drops its "running on ..." banner, so announce the URL
     # ourselves — on the startup event, which fires only once the port is bound.

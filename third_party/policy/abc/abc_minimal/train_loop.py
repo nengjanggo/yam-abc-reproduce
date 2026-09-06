@@ -258,13 +258,15 @@ def batch_to_device(batch, device, embedder):
 
 def main(config: TrainConfig):
     cache_root = Path(config.cache_root)
+    model_cache = Path(config.model_cache_root).expanduser() if config.model_cache_root else cache_root
     # Fine-tune from an explicit --pretrained-ckpt path if given, else the default.
     checkpoint_path = (
         Path(config.pretrained_ckpt).expanduser()
         if config.pretrained_ckpt
-        else cache_root / "abc_dit_xl_200k_model.pt"
+        else model_cache / "abc_dit_xl_200k_model.pt"
     )
-    output_dir = cache_root / "finetune_checkpoints"
+    output_dir = (Path(config.checkpoint_dir).expanduser() if config.checkpoint_dir
+                  else cache_root / "finetune_checkpoints")
 
     # Auto-match the DiT shape to the pretrained checkpoint so fine-tuning from any
     # ABC-DiT size works without manually passing --model.hidden-size/depth/num-heads.
@@ -295,7 +297,7 @@ def main(config: TrainConfig):
     if config.load_pretrained:
         load_pretrained(model, checkpoint_path)
     else:
-        dinov3_ckpt = cache_root / "dinov3_vitb16_pretrain_lvd1689m.pth"
+        dinov3_ckpt = model_cache / "dinov3_vitb16_pretrain_lvd1689m.pth"
         if dinov3_ckpt.exists():
             sd = torch.load(dinov3_ckpt, map_location="cpu", weights_only=False)
             sd = sd.get("model", sd)

@@ -133,7 +133,7 @@
       <div class="sec-head sec-convert">Convert dataset</div>
       <div class="jobrow">
         <label class="fld"><span>task</span>
-          <input id="cv-task" placeholder="task (folder under data/episodes)" size="26" /></label>
+          <input id="cv-task" placeholder="task folder" size="26" /></label>
         <label class="fld"><span>format</span>
           <select id="cv-fmt" title="lerobot: pi0/pi0.5/molmoact2 · abc: ABC-DiT">
             <option value="lerobot">lerobot</option>
@@ -141,7 +141,7 @@
           </select></label>
         <label class="fld"><span>repo-id</span>
           <input id="cv-repo" placeholder="dataset repo-id (default: task name)" size="24" /></label>
-        <button class="btn" id="btn-convert" title="Run yam-abc-convert on data/episodes/<task> — no terminal needed">Convert</button>
+        <button class="btn" id="btn-convert" title="Convert recorded episodes">Convert</button>
       </div>
     </section>
     <section class="ft-sec">
@@ -210,7 +210,7 @@
       <label class="chk"><input type="checkbox" id="dp-record" checked /> record rollout</label>
       <label class="chk"><input type="checkbox" id="dp-rtc" /> RTC (abc)</label>
       <label class="fld"><span>rollout save path</span>
-        <input id="dp-save" placeholder="data/rollouts/&lt;name&gt;" value="data/rollouts/pi0" size="24" /></label>
+        <input id="dp-save" size="24" /></label>
       <label class="fld" title="Ramp the arms here before the policy takes over, so its first observation is in-distribution. Pre-filled from `deploy_home_pose` in the station YAML; clear it to skip homing."><span>home pose (optional)</span>
         <input id="dp-home" placeholder="14 comma-separated joints" size="38" /></label>
       <label class="fld" title="Safety: cap each arm joint to this speed in rad/s (truncate + warn). Control-rate invariant. 0 disables."><span>clamp rad/s</span>

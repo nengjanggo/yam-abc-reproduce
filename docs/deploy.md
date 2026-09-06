@@ -40,6 +40,13 @@ Two sections — **Server** (start a policy server) and **Client** (run the robo
 Same machine: Start Server → wait for `server ready` → Load & Run (host `127.0.0.1`). Remote
 GPU box: start the server there, set the host to its IP → Load & Run.
 
+`yam-abc-gui --save-root /mnt/yam` sets the local GUI's data and model storage root (default:
+repository root). The checkpoint dropdown scans `<save-root>/model/<backend>/checkpoints/`
+(π0 and π0.5 share `openpi`). Rollouts default to
+`<save-root>/data/rollouts/<backend>/<task>/<episode>`. Downloaded weights and model caches
+also live under `model/`. Existing checkpoints remain usable by entering their explicit path;
+the GUI does not move old artifacts.
+
 > **Only the Client half is remotable.** **Start Server** always launches on the box running
 > the GUI, and the **checkpoint** dropdown lists checkpoints found on *that* box. So for a
 > remote GPU box you start the server there by hand (§1) and type its checkpoint path in —
@@ -182,7 +189,8 @@ isn't importable until you restart it, so a running GUI will fail with
 `ModuleNotFoundError: openpi_client`.
 
 **Deploy tab:** in the **Server** section enter the **checkpoint path** (the path on the
-*server* machine — for openpi it's `checkpoints/<config>/<exp>/<step>`) and click **Start
+*server* machine — GUI-trained openpi models use
+`<save-root>/model/openpi/checkpoints/<config>/<exp>/<step>`) and click **Start
 Server**. Once the badge reads `server ready :PORT`, set **host**, **port** and **task
 instruction** in the **Client** section and click **Load & Run** — the arms ease to a start
 pose, then the policy drives them. (There is no single "Start" button; `Load & Run` stays

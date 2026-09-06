@@ -139,6 +139,10 @@ class TrainConfig:
     cache_root: str = field(
         default_factory=lambda: str(default_cache_root())
     )
+    # Optional separation of model assets/checkpoints from prepared training data.
+    # None preserves standalone ABC's original cache layout.
+    model_cache_root: str | None = None
+    checkpoint_dir: str | None = None
     seed: int = 123
     batch_size: int = 90
     num_workers: int = 16

@@ -4,6 +4,12 @@ Turn recorded demonstrations into a trained policy. Collect and review episodes 
 see [collect.md](collect.md). Assumes the station/venv are set up ([hardware.md](hardware.md));
 run everything from the repo root with the venv active.
 
+The GUI accepts `--save-root /mnt/yam` (default: repository root). GUI conversions and prepared
+training data use `<save-root>/data/`; checkpoints and downloaded model caches use
+`<save-root>/model/`. See the [storage layout](../README.md#quickstart). The shell examples
+below assume the default root; substitute your selected root when preparing data manually.
+Standalone commands retain their existing defaults.
+
 ## 1. Convert to a training dataset (Train tab → Convert)
 
 The backend decides the format:
@@ -17,7 +23,7 @@ The **Convert** panel runs this for you — no terminal needed:
 
 | Field | What it is |
 |---|---|
-| **task** | Folder under `data/episodes` to convert. |
+| **task** | Folder under the GUI's current collection save path to convert. |
 | **format** | `lerobot` (π<sub>0</sub> / π<sub>0.5</sub> / molmoact2) or `abc` (ABC-DiT). |
 | **repo-id** | Output dataset name (defaults to the task name). |
 | **Convert** | Runs `yam-abc-convert`. |
@@ -186,8 +192,8 @@ VRAM. `base checkpoint` is a local HF-format dir (or `allenai/MolmoAct2-Bimanual
 ### abc (ABC-DiT)
 
 ABC does **not** read the raw dataset at train time — it reads a prepared cache at
-`data/abc_cache/`. The GUI's `task`/`dataset` field is **vestigial**: the launcher hard-codes
-`--cache-root=data/abc_cache --mixture-preset=yam_abc`, which reads `{train_real,val_real}/` +
+`<save-root>/data/abc_cache/`. The GUI's `task`/`dataset` field is **vestigial**: the launcher sets
+`--cache-root=<save-root>/data/abc_cache --mixture-preset=yam_abc`, which reads `{train_real,val_real}/` +
 `norm_stats.json`. (`yam_abc` is the real preset name — the only other accepted values are the
 legacy alias `freemani` and upstream's `bottles`, which also demands sim data.)
 
@@ -232,8 +238,12 @@ cd ../../..
 python scripts/compute_abc_norm_stats.py --cache data/abc_cache --train-dir train_real
 
 # 4. Only when training from scratch (blank `pretrained ckpt`): put the DINOv3 ViT-B/16
-#    weights in the cache as data/abc_cache/dinov3_vitb16_pretrain_lvd1689m.pth (mind Meta's
+#    weights in model/abc/cache/dinov3_vitb16_pretrain_lvd1689m.pth (mind Meta's
 #    licence). Without the file the run prints "using random DINOv3" and trains an untrained
 #    vision backbone. Fine-tuning from a DiT checkpoint takes its vision weights from that
 #    checkpoint instead, and skips this.
 ```
+
+GUI ABC runs save checkpoints to `<save-root>/model/abc/checkpoints/<run>/` and CLIP downloads
+to `<save-root>/model/abc/cache/clip/`. Standalone ABC training keeps its original layout unless
+you pass `--model-cache-root`, `--checkpoint-dir`, and `--clip.cache-dir` explicitly.

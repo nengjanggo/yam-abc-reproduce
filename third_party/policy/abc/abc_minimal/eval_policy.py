@@ -506,10 +506,10 @@ def load_json_or_s3(path: str) -> dict[str, Any]:
     return json.loads(Path(path).expanduser().read_text())
 
 
-def local_checkpoint(path: str) -> Path:
+def local_checkpoint(path: str, cache_dir: Path | None = None) -> Path:
     if not path.startswith("s3://"):
         return Path(path).expanduser().resolve()
-    out_dir = ROOT / "checkpoints" / "downloads"
+    out_dir = cache_dir if cache_dir is not None else ROOT / "checkpoints" / "downloads"
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / Path(path).name
     if not out.exists():

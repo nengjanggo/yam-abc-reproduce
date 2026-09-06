@@ -39,7 +39,7 @@ class StationForm(BaseModel):
     robots: list[RobotForm] = []
     cameras: list[CameraForm] = []
     data_format: str = "default"
-    save_root: str = "data/episodes"
+    save_root: str | None = None  # omitted: retain the station's resolved collection path
     task_name: str = ""
 
 
@@ -57,7 +57,7 @@ class DeployStart(BaseModel):
     prompt: str = ""
     open_loop_horizon: int = 15               # non-RTC: rows executed per chunk before re-query (= ABC execute_chunk_dim)
     record: bool = True                       # log the rollout as an episode
-    save_root: str = "data/rollouts/pi0"      # rollouts: data/rollouts/<policy>/<task>/<ep>
+    save_root: str | None = None  # omitted: <GUI root>/data/rollouts/pi0
     home_pose: list[float] | None = None      # move here before the policy runs (demo start pose)
     rtc: bool = False                         # real-time chunking (abc: prefix-conditioned)
     # RTC knobs, mirroring ABC eval: P frozen-prefix rows, H rows streamed per

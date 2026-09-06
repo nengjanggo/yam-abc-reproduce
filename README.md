@@ -146,7 +146,28 @@ All `yam-abc-*` commands assume the repo venv is active — `cd yam-abc-reproduc
 
 ```bash
 yam-abc-gui          # http://localhost:8042
+# Choose another disk or shared storage location:
+yam-abc-gui --save-root /mnt/yam
 ```
+
+`--save-root` defaults to the repository root. GUI outputs use this layout beneath it:
+
+| Content | Location |
+|---|---|
+| Collected episodes | `data/episodes/<task>/<episode>` |
+| Recorded policy rollouts | `data/rollouts/<backend>/<task>/<episode>` |
+| Converted datasets | `data/lerobot/<repo-id>` or `data/abc/<repo-id>` |
+| Prepared ABC data / normalization statistics | `data/abc_cache/` / `data/openpi_assets/` |
+| OpenPI checkpoints | `model/openpi/checkpoints/<config>/<run>/<step>` |
+| MolmoAct2 checkpoints | `model/molmoact2/checkpoints/<run>/step*` |
+| ABC checkpoints | `model/abc/checkpoints/<run>/*.pt` |
+| Downloaded model weights and caches | `model/` (backend and library subfolders) |
+
+The GUI's editable save paths and custom station `save_root` settings override these defaults;
+relative output paths resolve against `--save-root`. Model and dataset cache locations are set
+for GUI child processes, while existing authentication settings are preserved. Existing data
+and checkpoints are not moved; select older checkpoints by their explicit paths. Standalone
+commands such as `yam-abc-teleop` and `yam-abc-convert` retain their own defaults.
 
 Opens the GUI. **Collect** and **Review** work
 end-to-end — teleoperate, record a few episodes, and inspect them. The **Train** and

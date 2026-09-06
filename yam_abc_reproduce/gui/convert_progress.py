@@ -26,11 +26,7 @@ import time
 from pathlib import Path
 
 from ..data.schema import WRITE_COMPLETE_FLAG
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_LEROBOT_HOME = _REPO_ROOT / "data" / "lerobot"
-_ABC_OUT = _REPO_ROOT / "data" / "abc"
-_EPISODES = _REPO_ROOT / "data" / "episodes"
+from .storage import DEFAULT_PATHS, StoragePaths
 
 # A float64 .npy is a 128-byte header then 8 bytes per sample, so a timestamp file's size
 # gives its frame count without reading it. Cross-checked against LeRobot's own
@@ -134,20 +130,18 @@ def _read_counter(info: Path, key: str) -> int:
     return int(digits) if digits else 0
 
 
-def snapshot(params: dict, pid: int | None, started: float) -> dict:
+def snapshot(params: dict, pid: int | None, started: float,
+             paths: StoragePaths = DEFAULT_PATHS) -> dict:
     """Progress for one convert job: episodes, frames, write rate, ETA.
 
     ``started`` is the job's launch time; rate is cumulative work over total elapsed, which
     averages across whole episodes and so rides out the extract/encode sawtooth. A short
     window would read zero for minutes at a time, since progress only moves at commits.
     """
-    task = (params.get("task") or params.get("dataset") or "").strip()
-    src_arg = params.get("src") or (f"data/episodes/{task}" if task else "")
-    src = Path(src_arg) if Path(src_arg).is_absolute() else _REPO_ROOT / src_arg
-    if not src_arg:
-        src = _EPISODES
+    params = paths.conversion_params(params)
+    src = Path(params["src"])
+    out = Path(params["out"])
     fmt = params.get("to", "lerobot")
-    repo_id = (params.get("repo_id") or task or "").strip()
 
     ep_total, frame_total = _source_totals(src)
     if fmt == "abc":
@@ -155,15 +149,14 @@ def snapshot(params: dict, pid: int | None, started: float) -> dict:
         # (ABCFormat.begin only mkdirs and resets its index), which would read as instant
         # progress -- so only count what THIS job wrote. And the newest file is the one being
         # written right now, minutes of encoding on a real episode, so it is not done yet.
-        mcaps = [p for p in (_ABC_OUT / repo_id).glob("episode_*.mcap")
-                 if p.stat().st_mtime >= started] if repo_id else []
+        mcaps = [p for p in out.glob("episode_*.mcap") if p.stat().st_mtime >= started]
         ep_done = len(mcaps)
         if ep_done and pid and Path(f"/proc/{pid}").exists():
             ep_done -= 1        # the in-flight one; app.js snaps the bar to 100% on exit
         frame_done = frame_total = 0
         done, total = ep_done, ep_total
     else:
-        info = _LEROBOT_HOME / repo_id / "meta" / "info.json"
+        info = out / "meta" / "info.json"
         ep_done = _read_counter(info, "total_episodes")
         frame_done = _read_counter(info, "total_frames")
         done, total = frame_done, frame_total

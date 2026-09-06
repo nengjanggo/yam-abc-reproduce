@@ -16,6 +16,7 @@ venv/
 # YAM-ABC-Reproduce data + artifacts (never commit recordings or checkpoints).
 # Anchored to repo root so they don't shadow the yam_abc_reproduce/data source package.
 /data/
+/model/
 /episodes/
 /checkpoints/
 /runs/

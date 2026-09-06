@@ -24,9 +24,11 @@ neither, so add `--extra deploy` or put openpi-client on PYTHONPATH (see docs/de
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 
@@ -38,11 +40,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger("yam_abc_reproduce.deploy.abc")
 
 
-def _maybe_merge_lora(ckpt_path: str) -> str:
+def _maybe_merge_lora(ckpt_path: str, output_dir: Path | None = None) -> str:
     """A LoRA-trained ABC checkpoint stores base/lora_a/lora_b per wrapped Linear,
     which the plain DiT can't load. If detected, fold the adapters into the base
     weights (W = base + lora_b@lora_a, scale=1.0 as apply_lora uses no alpha),
-    preserve norm_stats, write a sibling ``*_merged.pt`` and return its path.
+    preserve norm_stats, write to ``output_dir`` (or a sibling ``*_merged.pt``
+    for standalone use) and return its path.
     Non-LoRA checkpoints pass through unchanged."""
     import torch
 
@@ -54,6 +57,12 @@ def _maybe_merge_lora(ckpt_path: str) -> str:
         return ckpt_path  # already a plain checkpoint
 
     merged_path = os.path.splitext(ckpt_path)[0] + "_merged.pt"
+    if output_dir is not None:
+        source = Path(ckpt_path).resolve()
+        stat = source.stat()
+        key = hashlib.sha256(f"{source}:{stat.st_size}:{stat.st_mtime_ns}".encode()).hexdigest()[:16]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        merged_path = str(output_dir / f"{source.stem}_{key}_merged.pt")
     if os.path.isfile(merged_path):
         log.info("using existing merged checkpoint %s", merged_path)
         return merged_path
@@ -134,6 +143,8 @@ def main() -> None:
     p.add_argument("--checkpoint", required=True, help="checkpoint path or s3:// uri")
     p.add_argument("--prompt", required=True, help="fixed task instruction (baked at load)")
     p.add_argument("--device", default="cuda")
+    p.add_argument("--model-cache-root", type=Path, default=None,
+                   help="directory for downloaded weights, CLIP assets, and merged checkpoints")
     args = p.parse_args()
 
     from abc_minimal.config import SimEvalConfig
@@ -144,8 +155,11 @@ def main() -> None:
     from abc_minimal.dit import infer_dit_shape
 
     config = SimEvalConfig(checkpoint=args.checkpoint, prompt=args.prompt)
-    ckpt_path = local_checkpoint(config.checkpoint)
-    ckpt_path = _maybe_merge_lora(ckpt_path)  # fold LoRA adapters if present
+    cache = args.model_cache_root.expanduser().resolve() if args.model_cache_root else None
+    if cache is not None:
+        config.clip.cache_dir = str(cache / "clip")
+    ckpt_path = local_checkpoint(config.checkpoint, cache / "downloads" if cache else None)
+    ckpt_path = _maybe_merge_lora(ckpt_path, cache / "merged" if cache else None)
     # Match the model shape to the checkpoint.
     shape = infer_dit_shape(ckpt_path)
     for k, v in shape.items():

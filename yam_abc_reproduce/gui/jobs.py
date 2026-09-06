@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass, field
 
 from .builders import build_command
+from .storage import DEFAULT_PATHS, StoragePaths
 
 _MAX_LOG_LINES = 5000
 # Training/eval processes emit progress as ``@metric {"step":N,"loss":..,...}`` lines
@@ -102,13 +103,15 @@ class Job:
 
 
 class JobManager:
-    def __init__(self):
+    def __init__(self, paths: StoragePaths = DEFAULT_PATHS):
+        self.paths = paths
         self._jobs: dict[str, Job] = {}
         self._counter = 0
         self._lock = threading.Lock()
 
     def launch(self, kind: str, params: dict) -> Job:
-        cmd, real = build_command(kind, params)
+        params = (self.paths.conversion_params(params) if kind == "convert" else dict(params))
+        cmd, real = build_command(kind, params, paths=self.paths)
         with self._lock:
             self._counter += 1
             job_id = f"{kind}-{self._counter}"

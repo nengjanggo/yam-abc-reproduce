@@ -27,6 +27,7 @@ let OPTS = { controller_type: [], robot_type: [], gripper: [], camera_type: [], 
 // Live-hardware scan (/api/cameras/detect) so the rail's serial pickers offer real
 // devices instead of hand-typed serials. Refreshed at boot and via the ↻ button.
 let DEVICES = [];
+let STORAGE = null;
 
 // <option> tags from a list of strings or {value,label} objects.
 function optionTags(values, selected) {
@@ -86,6 +87,7 @@ function camRow(cam) {
 }
 
 function renderRail(cfg) {
+  STORAGE = cfg.storage;
   OPTS = cfg.options;
   const robots = (cfg.robots || []).map(robotRow).join("");
   const ctrls = (cfg.controllers || []).map(controllerRow).join("");
@@ -114,11 +116,17 @@ function renderRail(cfg) {
       <div class="cfg-row"><span class="k">format</span>
         <select class="sel" id="fmt">${optionTags(OPTS.data_format, cfg.data_format)}</select></div>
       <div class="cfg-row"><span class="k">save_root</span>
-        <input class="inp" id="save-root" value="${cfg.save_root || "data/episodes"}" /></div>
+        <input class="inp" id="save-root" /></div>
     </div>
     <div class="cfg"><h3>Task</h3>
       <input class="inp" id="task" placeholder="task name (required to record)" required value="${cfg.task_name && cfg.task_name !== "unknown" && cfg.task_name !== "unknow" ? cfg.task_name : ""}" />
     </div>`;
+
+  $("save-root").value = cfg.save_root || STORAGE.episodes;
+  $("save-root").placeholder = STORAGE.episodes;
+  $("cv-task").placeholder = `task (folder under ${$("save-root").value})`;
+  $("btn-convert").title = `Convert recorded episodes under ${$("save-root").value}`;
+  updateRolloutDefault();
 
   $("add-robot").onclick = () =>
     $("robot-rows").insertAdjacentHTML("beforeend", robotRow({ type: OPTS.robot_type[0], gripper: OPTS.gripper[0] }));
@@ -163,7 +171,7 @@ function gatherForm() {
     robots,
     cameras,
     data_format: $("fmt").value,
-    save_root: $("save-root").value.trim() || "data/episodes",
+    save_root: $("save-root").value.trim() || STORAGE.episodes,
     task_name: $("task").value.trim(),
   };
 }
@@ -700,7 +708,7 @@ renderTrainFields($("ft-backend").value); // initial render
 // Convert recorded episodes to a training dataset — as a job so progress streams here.
 $("btn-convert").onclick = async () => {
   const task = $("cv-task").value.trim();
-  if (!task) { $("ft-logs").textContent += "[convert] enter a task (folder under data/episodes) first\n"; return; }
+  if (!task) { $("ft-logs").textContent += "[convert] enter a task folder under the collection save path first\n"; return; }
   const job = await post("/api/jobs", { kind: "convert", params: {
     task, to: $("cv-fmt").value, repo_id: $("cv-repo").value.trim() || task } });
   if (job.detail) { $("ft-logs").textContent += `[convert] refused: ${job.detail}\n`; return; }
@@ -729,6 +737,14 @@ $("btn-train").onclick = async () => {
 // Default port per backend; only the openpi backends (pi0 / pi0.5) use the config field.
 const _DP_PORT = { pi0: 8000, pi05: 8001, molmoact2: 8202, abc: 8300 };
 let _dpErrShown = null; // last rollout error logged, so the WS feed logs it once
+function updateRolloutDefault() {
+  if (!STORAGE) return;
+  const field = $("dp-save");
+  const next = `${STORAGE.rollouts}/${$("dp-backend").value}`;
+  if (!field.value || field.value === field.dataset.defaultPath) field.value = next;
+  field.dataset.defaultPath = next;
+  field.placeholder = next;
+}
 $("dp-backend").addEventListener("change", () => {
   const b = $("dp-backend").value;
   $("dp-port").value = _DP_PORT[b] || 8000;
@@ -738,7 +754,7 @@ $("dp-backend").addEventListener("change", () => {
   $("dp-config").disabled = !(b in _OPENPI_CFG);
   $("dp-config").value = _OPENPI_CFG[b] || "";
   // Rollouts land in data/rollouts/<policy>/<task>/<ep> (recorder adds the task level).
-  $("dp-save").value = `data/rollouts/${b}`;
+  updateRolloutDefault();
 });
 
 // Same-machine: launch the policy SERVER locally as a Job (tails server logs).
@@ -786,7 +802,7 @@ $("btn-deploy").onclick = async () => {
     port: Number($("dp-port").value),
     prompt: $("dp-prompt").value,
     record: $("dp-record").checked,
-    save_root: $("dp-save").value,
+    save_root: $("dp-save").value.trim() || $("dp-save").dataset.defaultPath,
     home_pose: home && home.length ? home : null,
     rtc: $("dp-rtc").checked,
     max_joint_speed: Number($("dp-clamp").value) || 0,

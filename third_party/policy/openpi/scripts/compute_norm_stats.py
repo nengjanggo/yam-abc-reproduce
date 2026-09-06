@@ -88,8 +88,11 @@ def create_rlds_dataloader(
     return data_loader, num_batches
 
 
-def main(config_name: str, repo_id: str | None = None, num_arms: int | None = None, max_frames: int | None = None):
+def main(config_name: str, repo_id: str | None = None, num_arms: int | None = None,
+         max_frames: int | None = None, assets_base_dir: str | None = None):
     config = _config.get_config(config_name)
+    if assets_base_dir is not None:
+        config = dataclasses.replace(config, assets_base_dir=assets_base_dir)
     # num_arms lives on the data-config factory and shapes the transforms, so override it
     # BEFORE create() (train.py takes --data.num-arms; keep the two in sync for single-arm).
     data_factory = config.data

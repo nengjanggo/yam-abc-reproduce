@@ -44,10 +44,15 @@ Typical flow:
    saved for the current task.
 5. **E-STOP** halts all motion; **Reset Session** → **Start Teleop** to re-arm.
 
-Episodes are saved under `data/episodes/<task-slug>/<YYYYmmdd_HHMMSS>_<id>/` in
+Episodes are saved under `<save-root>/data/episodes/<task-slug>/<YYYYmmdd_HHMMSS>_<id>/` in
 YAM-ABC-Reproduce's default format. The task name is **slugified** — lowercased, spaces and
 punctuation to `_` — so `put the bottle in the bin` becomes `put_the_bottle_in_the_bin`, and
 that slug is what the Train tab's task field and `yam-abc-convert data/episodes/<task>` want.
+
+Launch with `yam-abc-gui --save-root /mnt/yam` to choose the storage root (default: repository
+root). The Output rail shows the resolved episode directory. A custom station or rail save
+path overrides it; relative output paths resolve against the selected root. The GUI Convert
+panel reads from the current collection path.
 
 Headless alternative: `yam-abc-teleop --record "<task>" --seconds 15` records one episode — but
 bring the CAN buses up yourself first (`bash third_party/i2rt/scripts/reset_all_can.sh`), since
