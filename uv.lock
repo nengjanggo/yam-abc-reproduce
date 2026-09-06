@@ -2230,6 +2230,7 @@ dependencies = [
     { name = "click" },
     { name = "crcmod-plus" },
     { name = "dm-env" },
+    { name = "mcap-ros2-support" },
     { name = "mink" },
     { name = "mujoco" },
     { name = "numpy" },
@@ -2253,6 +2254,7 @@ requires-dist = [
     { name = "click", specifier = "<8.2.0" },
     { name = "crcmod-plus", specifier = ">=2.3.1" },
     { name = "dm-env", specifier = "==1.6" },
+    { name = "mcap-ros2-support", specifier = ">=0.5.5" },
     { name = "mink", specifier = ">=0.0.13" },
     { name = "mujoco", specifier = ">=3.3.5" },
     { name = "numpy", specifier = "==2.2.6" },
@@ -2992,6 +2994,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cc/8e/98af824adce25082f1c7fb8e8aab48b1678a370f97633a55bfb06c40e3fd/mcap_protobuf_support-0.5.4.tar.gz", hash = "sha256:3af2de2c2dbda9d1dbb1a526d2ad0cf3604ab44947dd1c99a52a2f990b1eb308", size = 7059, upload-time = "2025-12-24T21:22:57.716Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/74/ee/cb4beace2bbaf3877848dbc555366c5a72ec1dabba5d620bf746143d91c4/mcap_protobuf_support-0.5.4-py3-none-any.whl", hash = "sha256:072f83b7b147b5faa25df21c175cbf6e53bf959f8a6aea534167055bc4526649", size = 7286, upload-time = "2025-12-24T21:22:56.393Z" },
+]
+
+[[package]]
+name = "mcap-ros2-support"
+version = "0.5.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mcap" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/84/0d/f6da01d8e4b73861dba17fd2ebd9a78d2fd4fa582ad348cf18d16a79a7e1/mcap_ros2_support-0.5.7.tar.gz", hash = "sha256:8ddb67e452a6e2963664e29bc8868e61d7011b72feb2b62832ed444e27ca3ab8", size = 23295, upload-time = "2025-12-24T21:25:37.614Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/c5/8e8636099c180031436a011908a22216c25e6cb7790ba748212e203317c4/mcap_ros2_support-0.5.7-py3-none-any.whl", hash = "sha256:349f0e0f7af8ebeb516003e801ea5c5de5b4b65359ce4a17a8d98b25a9cea260", size = 22086, upload-time = "2025-12-24T21:25:36.425Z" },
 ]
 
 [[package]]
@@ -6972,6 +6986,7 @@ dependencies = [
     { name = "i2rt" },
     { name = "numpy" },
     { name = "pyyaml" },
+    { name = "tyro" },
 ]
 
 [package.optional-dependencies]
@@ -7093,6 +7108,7 @@ requires-dist = [
     { name = "pyrealsense2", marker = "extra == 'camera'", specifier = ">=2.54" },
     { name = "pyudev", marker = "extra == 'camera'", specifier = ">=0.24" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "tyro", specifier = ">=1.0.13" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'gui'", specifier = ">=0.27" },
     { name = "websockets", marker = "extra == 'deploy'", specifier = ">=12" },
     { name = "websockets", marker = "extra == 'gui'", specifier = ">=12" },

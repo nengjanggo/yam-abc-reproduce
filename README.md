@@ -46,7 +46,8 @@ standard dataset, fine-tune a VLA policy, and run it on the real arms.
 
 Clone the repository. The policy backends (openpi / molmoact2 / abc) are vendored
 directly under `third_party/policy/` (provenance in `third_party/policy/VERSIONS.md`);
-the only submodule is `third_party/i2rt`, and there is never a `uv sync` to run
+the only submodule is `third_party/i2rt`, pinned to
+[v1.3.3](https://github.com/i2rt-robotics/i2rt/releases/tag/v1.3.3), and there is never a `uv sync` to run
 *inside* a backend. `i2rt`, `openpi` (+ `openpi-client`) and `molmoact2/experiments`
 are installed editable from the checkout; `policy/abc` and the `policy/molmoact2`
 root declare no `[build-system]` and cannot be installed, so their dependency-groups
@@ -163,6 +164,11 @@ end-to-end — teleoperate, record a few episodes, and inspect them. The **Train
 | [docs/deploy.md](docs/deploy.md) | Run a trained policy — Deploy tab controls, robot host + GPU-box server, obs/action contract |
 
 ## CLI reference
+
+First-party Python commands and scripts use Tyro to generate arguments from typed
+dataclasses. Pass `--help` to see the options and defaults. Existing flag names and
+positional arguments are preserved; the doctor and udev setup `--selftest` options
+are now listed in help.
 
 | Command | What it does |
 |---|---|
