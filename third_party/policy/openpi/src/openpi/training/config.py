@@ -22,6 +22,7 @@ import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
 import openpi.policies.yam_policy as yam_policy
 import openpi.shared.download as _download
+import openpi.shared.nnx_utils as nnx_utils
 import openpi.shared.normalize as _normalize
 import openpi.training.droid_rlds_dataset as droid_rlds_dataset
 import openpi.training.misc.polaris_config as polaris_config
@@ -372,14 +373,27 @@ class LeRobotYamDataConfig(DataConfigFactory):
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        if self.num_arms not in (1, 2):
+            raise ValueError(f'num_arms must be 1 or 2, got {self.num_arms}.')
+
         # Rename the LeRobot feature keys onto the keys yam_policy expects.
+        image_repack: dict[str, Any]
+        if self.num_arms == 1:
+            image_repack = {
+                'observation/image': 'observation.images.top_rgb',
+                'observation/left_wrist': 'observation.images.wrist_rgb',
+            }
+        else:
+            image_repack = {
+                'observation/image': 'observation.images.top_rgb',
+                'observation/left_wrist': 'observation.images.left_rgb',
+                'observation/right_wrist': 'observation.images.right_rgb',
+            }
         repack_transform = _transforms.Group(
             inputs=[
                 _transforms.RepackTransform(
                     {
-                        "observation/image": "observation.images.top_rgb",
-                        "observation/left_wrist": "observation.images.left_rgb",
-                        "observation/right_wrist": "observation.images.right_rgb",
+                        **image_repack,
                         "observation/state": "observation.state",
                         "actions": "action",
                         # Carry the prompt through (PromptFromLeRobotTask sets it from
@@ -792,6 +806,33 @@ _CONFIGS = [
         freeze_filter=pi0_config.Pi0Config(
             pi05=True, paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
         ).get_freeze_filter(),
+        ema_decay=None,
+    ),
+    TrainConfig(
+        name='pi05_yam_dit_lora',
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_expert_variant='gemma_300m_lora',
+            action_expert_lora_rank=32,
+            action_expert_lora_alpha=32.0,
+            action_expert_lora_rslora=False,
+            stop_gradient_vlm_prefix=True,
+        ),
+        data=LeRobotYamDataConfig(
+            repo_id='nengjanggo/yam_pick_up_the_white_ethernet_cable_and_plug_it_into_the_black_ethernet_port',
+            num_arms=1,
+            base_config=DataConfig(
+                prompt_from_task=True,
+                action_sequence_keys=('action',),
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            'gs://openpi-assets/checkpoints/pi05_base/params',
+            restore_dtype='bfloat16',
+            restore_as_jax_array=True,
+        ),
+        num_train_steps=30_000,
+        freeze_filter=nnx.Not(nnx_utils.PathRegex('.*llm.*_1.*lora.*')),
         ema_decay=None,
     ),
     TrainConfig(

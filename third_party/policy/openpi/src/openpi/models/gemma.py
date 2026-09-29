@@ -55,8 +55,19 @@ class Config:
 Variant = Literal["dummy", "gemma_300m", "gemma_300m_lora", "gemma_2b", "gemma_2b_lora"]
 
 
-def get_config(variant: Variant) -> Config:
-    """Returns config for specified gemma variant."""
+def get_config(
+    variant: Variant,
+    *,
+    lora_rank: int | None = None,
+    lora_alpha: float | None = None,
+    lora_rslora: bool = False,
+) -> Config:
+    '''지정한 Gemma variant와 optional LoRA hyperparameter로 config를 생성한다.'''
+    if lora_rank is not None and lora_rank <= 0:
+        raise ValueError(f'lora_rank must be positive, got {lora_rank}.')
+    if lora_alpha is not None and lora_alpha <= 0:
+        raise ValueError(f'lora_alpha must be positive, got {lora_alpha}.')
+
     if variant == "dummy":
         return Config(
             width=64,
@@ -86,6 +97,8 @@ def get_config(variant: Variant) -> Config:
             head_dim=256,
         )
     if variant == "gemma_2b_lora":
+        rank: int = 16 if lora_rank is None else lora_rank
+        alpha: float = 16.0 if lora_alpha is None else lora_alpha
         return Config(
             width=2048,
             depth=18,
@@ -93,10 +106,15 @@ def get_config(variant: Variant) -> Config:
             num_heads=8,
             num_kv_heads=1,
             head_dim=256,
-            lora_configs={"attn": lora.LoRAConfig(rank=16, alpha=16.0), "ffn": lora.LoRAConfig(rank=16, alpha=16.0)},
+            lora_configs={
+                'attn': lora.LoRAConfig(rank=rank, alpha=alpha, rslora=lora_rslora),
+                'ffn': lora.LoRAConfig(rank=rank, alpha=alpha, rslora=lora_rslora),
+            },
         )
     if variant == "gemma_300m_lora":
         # 311M params
+        rank: int = 32 if lora_rank is None else lora_rank
+        alpha: float = 32.0 if lora_alpha is None else lora_alpha
         return Config(
             width=1024,
             depth=18,
@@ -104,7 +122,10 @@ def get_config(variant: Variant) -> Config:
             num_heads=8,
             num_kv_heads=1,
             head_dim=256,
-            lora_configs={"attn": lora.LoRAConfig(rank=32, alpha=32.0), "ffn": lora.LoRAConfig(rank=32, alpha=32.0)},
+            lora_configs={
+                'attn': lora.LoRAConfig(rank=rank, alpha=alpha, rslora=lora_rslora),
+                'ffn': lora.LoRAConfig(rank=rank, alpha=alpha, rslora=lora_rslora),
+            },
         )
     raise ValueError(f"Unknown variant: {variant}")
 

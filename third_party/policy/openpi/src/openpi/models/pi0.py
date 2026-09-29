@@ -67,8 +67,14 @@ class Pi0(_model.BaseModel):
     def __init__(self, config: pi0_config.Pi0Config, rngs: nnx.Rngs):
         super().__init__(config.action_dim, config.action_horizon, config.max_token_len)
         self.pi05 = config.pi05
+        self.stop_gradient_vlm_prefix: bool = config.stop_gradient_vlm_prefix
         paligemma_config = _gemma.get_config(config.paligemma_variant)
-        action_expert_config = _gemma.get_config(config.action_expert_variant)
+        action_expert_config = _gemma.get_config(
+            config.action_expert_variant,
+            lora_rank=config.action_expert_lora_rank,
+            lora_alpha=config.action_expert_lora_alpha,
+            lora_rslora=config.action_expert_lora_rslora,
+        )
         # TODO: rewrite gemma in NNX. For now, use bridge.
         llm = nnx_bridge.ToNNX(
             _gemma.Module(
@@ -202,6 +208,9 @@ class Pi0(_model.BaseModel):
         # one big forward pass of prefix + suffix at once
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
         suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(observation, x_t, time)
+        if self.stop_gradient_vlm_prefix:
+            # Frozen VLM의 forward 값은 유지하고 불필요한 backward graph만 차단한다.
+            prefix_tokens = jax.lax.stop_gradient(prefix_tokens)
         input_mask = jnp.concatenate([prefix_mask, suffix_mask], axis=1)
         ar_mask = jnp.concatenate([prefix_ar_mask, suffix_ar_mask], axis=0)
         attn_mask = make_attn_mask(input_mask, ar_mask)

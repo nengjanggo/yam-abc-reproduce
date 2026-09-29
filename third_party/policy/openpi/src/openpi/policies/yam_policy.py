@@ -1,14 +1,16 @@
-"""Policy transforms for YAM LeRobot datasets.
+'''Policy transforms for YAM LeRobot datasets.
 
 YAM episodes are converted to LeRobot v3.0 with:
-  observation.state              (14,) = [L: 6 joints + 1 gripper, R: 6 joints + 1 gripper]
-  action                         (14,) same layout (leader-derived command)
+  observation.state              (7 * num_arms,) = per-arm [6 joints + 1 gripper]
+  action                         (7 * num_arms,) same layout (leader-derived command)
   observation.images.top_rgb     third-person (overhead)
-  observation.images.left_rgb    left view   -> left wrist slot
-  observation.images.right_rgb   right view  -> right wrist slot
-"""
+  observation.images.wrist_rgb   single-arm wrist view -> left wrist slot
+  observation.images.left_rgb    bimanual left view    -> left wrist slot
+  observation.images.right_rgb   bimanual right view   -> right wrist slot
+'''
 
 import dataclasses
+from typing import Any
 
 import einops
 import numpy as np
@@ -45,12 +47,21 @@ class YamInputs(transforms.DataTransformFn):
 
     model_type: _model.ModelType
 
-    def __call__(self, data: dict) -> dict:
-        base = _parse_image(data["observation/image"])
-        left = _parse_image(data["observation/left_wrist"])
-        right = _parse_image(data["observation/right_wrist"])
+    def __call__(
+        self,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        '''Repacked YAM sample을 받아 model input dictionary로 변환한다.'''
+        # 공통 top camera와 wrist camera image를 변환한다.
+        base: np.ndarray = _parse_image(data['observation/image'])
+        left: np.ndarray = _parse_image(data['observation/left_wrist'])
+        has_right_wrist: bool = 'observation/right_wrist' in data
+        right: np.ndarray = (
+            _parse_image(data['observation/right_wrist']) if has_right_wrist else np.zeros_like(base)
+        )
 
-        inputs = {
+        # single-arm dataset은 사용하지 않는 right wrist slot을 mask한다.
+        inputs: dict[str, Any] = {
             "state": data["observation/state"],
             "image": {
                 "base_0_rgb": base,
@@ -60,7 +71,7 @@ class YamInputs(transforms.DataTransformFn):
             "image_mask": {
                 "base_0_rgb": np.True_,
                 "left_wrist_0_rgb": np.True_,
-                "right_wrist_0_rgb": np.True_,
+                "right_wrist_0_rgb": np.True_ if has_right_wrist else np.False_,
             },
         }
         if "actions" in data:  # only present during training

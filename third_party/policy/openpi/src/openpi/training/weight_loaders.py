@@ -4,6 +4,8 @@ import re
 from typing import Protocol, runtime_checkable
 
 import flax.traverse_util
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 import openpi.models.model as _model
@@ -46,10 +48,20 @@ class CheckpointWeightLoader(WeightLoader):
     """
 
     params_path: str
+    restore_dtype: str | None = None
+    restore_as_jax_array: bool = False
 
     def load(self, params: at.Params) -> at.Params:
-        # We are loading np.ndarray and relying on the training code to properly convert and shard the params.
-        loaded_params = _model.restore_params(download.maybe_download(self.params_path), restore_type=np.ndarray)
+        # checkpoint를 target dtype의 device array로 직접 복원해 host RAM 사용량을 줄인다.
+        restore_dtype: jnp.dtype | None = None if self.restore_dtype is None else jnp.dtype(self.restore_dtype)
+        restore_type: type[np.ndarray] | type[jax.Array] = (
+            jax.Array if self.restore_as_jax_array else np.ndarray
+        )
+        loaded_params: at.Params = _model.restore_params(
+            download.maybe_download(self.params_path),
+            restore_type=restore_type,
+            dtype=restore_dtype,
+        )
         # Add all missing LoRA weights.
         return _merge_params(loaded_params, params, missing_regex=".*lora.*")
 

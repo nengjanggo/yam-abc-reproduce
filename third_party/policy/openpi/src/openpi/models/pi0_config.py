@@ -20,6 +20,10 @@ class Pi0Config(_model.BaseModelConfig):
     dtype: str = "bfloat16"
     paligemma_variant: _gemma.Variant = "gemma_2b"
     action_expert_variant: _gemma.Variant = "gemma_300m"
+    # action expert LoRA variant의 기본값을 optional override한다.
+    action_expert_lora_rank: int | None = None
+    action_expert_lora_alpha: float | None = None
+    action_expert_lora_rslora: bool = False
 
     # Set the model specific defaults.
     action_dim: int = 32
@@ -31,6 +35,8 @@ class Pi0Config(_model.BaseModelConfig):
     pi05: bool = False
     # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
     discrete_state_input: bool = None  # type: ignore
+    # Frozen VLM parameter의 forward 값은 유지하고 backward gradient만 차단한다.
+    stop_gradient_vlm_prefix: bool = False
 
     pytorch_compile_mode: str | None = "max-autotune"
 
