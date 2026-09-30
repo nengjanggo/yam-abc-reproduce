@@ -66,9 +66,19 @@ class Policy(BasePolicy):
 
     @override
     def infer(self, obs: dict, *, noise: np.ndarray | None = None) -> dict:  # type: ignore[misc]
+        # RTC prefix도 observation과 동일한 delta action 및 normalization transform을 거친다.
+        action_prefix: np.ndarray | None = None
+        if 'action_prefix' in obs:
+            if self._is_pytorch_model:
+                raise NotImplementedError('RTC action_prefix requires the JAX policy')
+            action_prefix = np.array(obs['action_prefix'], dtype=np.float32, copy=True)
+            if action_prefix.ndim != 2 or action_prefix.shape[0] == 0 or not np.isfinite(action_prefix).all():
+                raise ValueError('action_prefix must be a finite nonempty (prefix_length, action_dim) array')
+            obs = {**obs, 'actions': action_prefix}
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
         inputs = self._input_transform(inputs)
+        normalized_prefix: np.ndarray | None = inputs.pop('actions', None) if action_prefix is not None else None
         if not self._is_pytorch_model:
             # Make a batch and convert to jax.Array.
             inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
@@ -80,6 +90,9 @@ class Policy(BasePolicy):
 
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
+        if normalized_prefix is not None:
+            # Shape `(prefix_length, action_dim)`에서 `(1, prefix_length, action_dim)`으로 batch 축을 추가한다.
+            sample_kwargs['action_prefix'] = jnp.asarray(normalized_prefix)[None, ...]
         if noise is not None:
             noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
 

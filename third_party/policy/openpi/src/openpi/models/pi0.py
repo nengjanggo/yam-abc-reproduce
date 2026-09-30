@@ -230,6 +230,7 @@ class Pi0(_model.BaseModel):
         *,
         num_steps: int | at.Int[at.Array, ""] = 10,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
+        action_prefix: at.Float[at.Array, 'b p ad'] | None = None,
     ) -> _model.Actions:
         observation = _model.preprocess_observation(None, observation, train=False)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
@@ -238,6 +239,19 @@ class Pi0(_model.BaseModel):
         batch_size = observation.state.shape[0]
         if noise is None:
             noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
+        if action_prefix is not None:
+            if action_prefix.shape[0] != batch_size or action_prefix.shape[2] != self.action_dim:
+                raise ValueError('action_prefix must have shape (batch, prefix_length, action_dim)')
+            if not 0 < action_prefix.shape[1] < self.action_horizon:
+                raise ValueError('action_prefix length must be between 1 and action_horizon - 1')
+            # Shape `(batch_size, prefix_length, action_dim)`을 `(batch_size, action_horizon, action_dim)`으로 확장한다.
+            prefix_values: at.Float[at.Array, 'b ah ad'] = jnp.pad(
+                action_prefix,
+                ((0, 0), (0, self.action_horizon - action_prefix.shape[1]), (0, 0)),
+            )
+            action_prefix_mask: at.Bool[at.Array, '1 ah 1'] = jnp.arange(self.action_horizon)[
+                None, :, None
+            ] < action_prefix.shape[1]
 
         # first fill KV cache with a forward pass of the prefix
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
@@ -247,6 +261,9 @@ class Pi0(_model.BaseModel):
 
         def step(carry):
             x_t, time = carry
+            if action_prefix is not None:
+                # 이미 계획된 prefix를 각 flow time의 noisy trajectory에 고정한다.
+                x_t = jnp.where(action_prefix_mask, time * noise + (1.0 - time) * prefix_values, x_t)
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
                 observation, x_t, jnp.broadcast_to(time, batch_size)
             )
@@ -285,4 +302,6 @@ class Pi0(_model.BaseModel):
             return time >= -dt / 2
 
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
+        if action_prefix is not None:
+            x_0 = jnp.where(action_prefix_mask, prefix_values, x_0)
         return x_0

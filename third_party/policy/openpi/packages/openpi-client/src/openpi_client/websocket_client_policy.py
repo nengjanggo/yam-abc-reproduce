@@ -56,3 +56,9 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
     @override
     def reset(self) -> None:
         pass
+
+    def close(
+        self,
+    ) -> None:
+        '''열린 WebSocket policy connection을 닫는다.'''
+        self._ws.close()

@@ -1,5 +1,6 @@
 from flax import nnx
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -103,6 +104,31 @@ def test_pi05_stop_gradient_vlm_prefix_preserves_loss_and_action_expert_gradient
             np.asarray(optimized_gradient),
             np.asarray(baseline_gradient),
         )
+
+
+
+def test_pi05_rtc_prefix_is_preserved(
+) -> None:
+    '''Dummy π0.5가 RTC prefix를 고정하면서 continuation을 생성하는지 검증한다.'''
+    rng: jax.Array = jax.random.key(0)
+    config: pi0_config.Pi0Config = pi0_config.Pi0Config(
+        pi05=True,
+        paligemma_variant='dummy',
+        action_expert_variant='dummy',
+    )
+    model: pi0.Pi0 = config.create(rng)
+    observation: _model.Observation = config.fake_obs(1)
+    # Shape `(batch_size=1, prefix_length=4, action_dim)`의 normalized prefix를 준비한다.
+    action_prefix: jax.Array = jnp.full((1, 4, model.action_dim), 0.25)
+    # Shape `(1, 4, action_dim)`에서 `(1, action_horizon, action_dim)`으로 확장된다.
+    actions: jax.Array = nnx_utils.module_jit(model.sample_actions)(
+        rng,
+        observation,
+        num_steps=2,
+        action_prefix=action_prefix,
+    )
+    assert actions.shape == (1, model.action_horizon, model.action_dim)
+    np.testing.assert_allclose(np.asarray(actions[:, :4]), np.asarray(action_prefix))
 
 
 def test_pi0_fast_model():
