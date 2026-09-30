@@ -8,6 +8,7 @@ from openpi.models import model as _model
 from openpi.models import pi0
 from openpi.models import pi0_config
 from openpi.models import pi0_fast
+from openpi.models import realtime_chunking
 from openpi.shared import download
 from openpi.shared import nnx_utils
 
@@ -107,9 +108,16 @@ def test_pi05_stop_gradient_vlm_prefix_preserves_loss_and_action_expert_gradient
 
 
 
-def test_pi05_rtc_prefix_is_preserved(
+def test_rtc_prefix_weights_match_reference_docstring(
 ) -> None:
-    '''Dummy π0.5가 RTC prefix를 고정하면서 continuation을 생성하는지 검증한다.'''
+    '''가져온 RTC get_prefix_weights가 원본 docstring 예시와 같은 weight를 만드는지 검증한다.'''
+    weights: jax.Array = realtime_chunking.get_prefix_weights(2, 6, 10, 'linear')
+    np.testing.assert_allclose(np.asarray(weights), [1, 1, 0.8, 0.6, 0.4, 0.2, 0, 0, 0, 0], atol=1e-6)
+
+
+def test_pi05_rtc_guidance_pulls_prefix_toward_previous_chunk(
+) -> None:
+    '''Dummy π0.5에서 RTC guidance가 weight 구간을 이전 chunk 쪽으로 끌어당기는지 검증한다.'''
     rng: jax.Array = jax.random.key(0)
     config: pi0_config.Pi0Config = pi0_config.Pi0Config(
         pi05=True,
@@ -118,17 +126,24 @@ def test_pi05_rtc_prefix_is_preserved(
     )
     model: pi0.Pi0 = config.create(rng)
     observation: _model.Observation = config.fake_obs(1)
-    # Shape `(batch_size=1, prefix_length=4, action_dim)`의 normalized prefix를 준비한다.
-    action_prefix: jax.Array = jnp.full((1, 4, model.action_dim), 0.25)
-    # Shape `(1, 4, action_dim)`에서 `(1, action_horizon, action_dim)`으로 확장된다.
-    actions: jax.Array = nnx_utils.module_jit(model.sample_actions)(
+    sample_actions = nnx_utils.module_jit(model.sample_actions)
+    # Shape `(batch_size=1, action_horizon, action_dim)`의 normalized 이전 chunk를 준비한다.
+    prev_action_chunk: jax.Array = jnp.full((1, model.action_horizon, model.action_dim), 0.25)
+    unguided: jax.Array = sample_actions(rng, observation, num_steps=10)
+    guided: jax.Array = sample_actions(
         rng,
         observation,
-        num_steps=2,
-        action_prefix=action_prefix,
+        num_steps=10,
+        prev_action_chunk=prev_action_chunk,
+        inference_delay=4,
+        prefix_attention_horizon=25,
     )
-    assert actions.shape == (1, model.action_horizon, model.action_dim)
-    np.testing.assert_allclose(np.asarray(actions[:, :4]), np.asarray(action_prefix))
+    assert guided.shape == (1, model.action_horizon, model.action_dim)
+    assert np.isfinite(np.asarray(guided)).all()
+    # Weight 1인 inference_delay 구간이 guidance 없이 생성한 chunk보다 이전 chunk에 가까워야 한다.
+    unguided_error: float = float(jnp.abs(unguided[:, :4] - prev_action_chunk[:, :4]).mean())
+    guided_error: float = float(jnp.abs(guided[:, :4] - prev_action_chunk[:, :4]).mean())
+    assert guided_error < 0.5 * unguided_error
 
 
 def test_pi0_fast_model():

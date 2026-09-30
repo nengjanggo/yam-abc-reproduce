@@ -66,19 +66,28 @@ class Policy(BasePolicy):
 
     @override
     def infer(self, obs: dict, *, noise: np.ndarray | None = None) -> dict:  # type: ignore[misc]
-        # RTC prefix도 observation과 동일한 delta action 및 normalization transform을 거친다.
-        action_prefix: np.ndarray | None = None
-        if 'action_prefix' in obs:
+        # RTC 이전 chunk도 observation과 동일한 delta action 및 normalization transform을 거친다.
+        prev_action_chunk: np.ndarray | None = None
+        if 'rtc_prev_action_chunk' in obs:
             if self._is_pytorch_model:
-                raise NotImplementedError('RTC action_prefix requires the JAX policy')
-            action_prefix = np.array(obs['action_prefix'], dtype=np.float32, copy=True)
-            if action_prefix.ndim != 2 or action_prefix.shape[0] == 0 or not np.isfinite(action_prefix).all():
-                raise ValueError('action_prefix must be a finite nonempty (prefix_length, action_dim) array')
-            obs = {**obs, 'actions': action_prefix}
+                raise NotImplementedError('RTC requires the JAX policy')
+            prev_action_chunk = np.array(obs.pop('rtc_prev_action_chunk'), dtype=np.float32, copy=True)
+            inference_delay: int = int(obs.pop('rtc_inference_delay'))
+            prefix_attention_horizon: int = int(obs.pop('rtc_prefix_attention_horizon'))
+            if (
+                prev_action_chunk.ndim != 2
+                or not 0 < prev_action_chunk.shape[0] <= self._model.action_horizon
+                or not np.isfinite(prev_action_chunk).all()
+            ):
+                raise ValueError('rtc_prev_action_chunk must be a finite (1..action_horizon, action_dim) array')
+            # Guidance weight가 0이 아닌 구간은 실제 이전 action으로 채워져 있어야 한다.
+            if not 0 <= inference_delay <= prefix_attention_horizon <= prev_action_chunk.shape[0]:
+                raise ValueError('RTC requires 0 <= inference_delay <= prefix_attention_horizon <= len(prev chunk)')
+            obs = {**obs, 'actions': prev_action_chunk}
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
         inputs = self._input_transform(inputs)
-        normalized_prefix: np.ndarray | None = inputs.pop('actions', None) if action_prefix is not None else None
+        normalized_prev_chunk: np.ndarray | None = inputs.pop('actions', None) if prev_action_chunk is not None else None
         if not self._is_pytorch_model:
             # Make a batch and convert to jax.Array.
             inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
@@ -90,9 +99,15 @@ class Policy(BasePolicy):
 
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
-        if normalized_prefix is not None:
-            # Shape `(prefix_length, action_dim)`에서 `(1, prefix_length, action_dim)`으로 batch 축을 추가한다.
-            sample_kwargs['action_prefix'] = jnp.asarray(normalized_prefix)[None, ...]
+        if normalized_prev_chunk is not None:
+            # Shape `(N, action_dim)`을 weight 0인 뒤쪽 0으로 채워 `(1, action_horizon, action_dim)`으로 만든다.
+            padded_prev_chunk: np.ndarray = np.pad(
+                np.asarray(normalized_prev_chunk),
+                ((0, self._model.action_horizon - normalized_prev_chunk.shape[0]), (0, 0)),
+            )
+            sample_kwargs['prev_action_chunk'] = jnp.asarray(padded_prev_chunk)[None, ...]
+            sample_kwargs['inference_delay'] = inference_delay
+            sample_kwargs['prefix_attention_horizon'] = prefix_attention_horizon
         if noise is not None:
             noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
 

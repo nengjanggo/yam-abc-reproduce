@@ -9,6 +9,7 @@ from typing_extensions import override
 
 from openpi.models import model as _model
 from openpi.models import pi0_config
+from openpi.models import realtime_chunking as _rtc
 import openpi.models.gemma as _gemma
 import openpi.models.siglip as _siglip
 from openpi.shared import array_typing as at
@@ -230,7 +231,10 @@ class Pi0(_model.BaseModel):
         *,
         num_steps: int | at.Int[at.Array, ""] = 10,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
-        action_prefix: at.Float[at.Array, 'b p ad'] | None = None,
+        prev_action_chunk: at.Float[at.Array, 'b ah ad'] | None = None,
+        inference_delay: int | at.Int[at.Array, ''] = 0,
+        prefix_attention_horizon: int | at.Int[at.Array, ''] = 0,
+        max_guidance_weight: float | at.Float[at.Array, ''] = 5.0,
     ) -> _model.Actions:
         observation = _model.preprocess_observation(None, observation, train=False)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
@@ -239,19 +243,8 @@ class Pi0(_model.BaseModel):
         batch_size = observation.state.shape[0]
         if noise is None:
             noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
-        if action_prefix is not None:
-            if action_prefix.shape[0] != batch_size or action_prefix.shape[2] != self.action_dim:
-                raise ValueError('action_prefix must have shape (batch, prefix_length, action_dim)')
-            if not 0 < action_prefix.shape[1] < self.action_horizon:
-                raise ValueError('action_prefix length must be between 1 and action_horizon - 1')
-            # Shape `(batch_size, prefix_length, action_dim)`을 `(batch_size, action_horizon, action_dim)`으로 확장한다.
-            prefix_values: at.Float[at.Array, 'b ah ad'] = jnp.pad(
-                action_prefix,
-                ((0, 0), (0, self.action_horizon - action_prefix.shape[1]), (0, 0)),
-            )
-            action_prefix_mask: at.Bool[at.Array, '1 ah 1'] = jnp.arange(self.action_horizon)[
-                None, :, None
-            ] < action_prefix.shape[1]
+        if prev_action_chunk is not None and prev_action_chunk.shape != noise.shape:
+            raise ValueError('prev_action_chunk must have shape (batch, action_horizon, action_dim)')
 
         # first fill KV cache with a forward pass of the prefix
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
@@ -259,11 +252,7 @@ class Pi0(_model.BaseModel):
         positions = jnp.cumsum(prefix_mask, axis=1) - 1
         _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
 
-        def step(carry):
-            x_t, time = carry
-            if action_prefix is not None:
-                # 이미 계획된 prefix를 각 flow time의 noisy trajectory에 고정한다.
-                x_t = jnp.where(action_prefix_mask, time * noise + (1.0 - time) * prefix_values, x_t)
+        def velocity(x_t, time):
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
                 observation, x_t, jnp.broadcast_to(time, batch_size)
             )
@@ -292,8 +281,25 @@ class Pi0(_model.BaseModel):
                 adarms_cond=[None, adarms_cond],
             )
             assert prefix_out is None
-            v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
+            return self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
+        def step(carry):
+            x_t, time = carry
+            if prev_action_chunk is None:
+                v_t = velocity(x_t, time)
+            else:
+                # RTC soft masking guidance(realtime_chunking.py)는 t=0 noise, t=1 data convention을 사용하므로
+                # openpi의 time과 velocity 부호를 뒤집어 호출하고 결과를 다시 openpi convention으로 되돌린다.
+                v_t = -_rtc.pinv_corrected_velocity(
+                    lambda x, rtc_time: -velocity(x, 1.0 - rtc_time),
+                    x_t,
+                    prev_action_chunk,
+                    1.0 - time,
+                    inference_delay,
+                    prefix_attention_horizon,
+                    'exp',
+                    max_guidance_weight,
+                )
             return x_t + dt * v_t, time + dt
 
         def cond(carry):
@@ -302,6 +308,4 @@ class Pi0(_model.BaseModel):
             return time >= -dt / 2
 
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
-        if action_prefix is not None:
-            x_0 = jnp.where(action_prefix_mask, prefix_values, x_0)
         return x_0
